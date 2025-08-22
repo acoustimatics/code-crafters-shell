@@ -1,17 +1,23 @@
-#[allow(unused_imports)]
 use std::io::{self, Write};
 use std::error::Error;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // Uncomment this block to pass the first stage
-    print!("$ ");
-    io::stdout().flush()?;
+fn main() {
+    repl();
+}
 
-    // Wait for user input
+fn repl() -> ! {
+    loop {
+        print!("$ ");
+        match read() {
+            Ok(input) => println!("{}: command not found", input.trim()),
+            Err(e) => eprintln!("error: {}", e),
+        }
+    }
+}
+
+fn read() -> Result<String, Box<dyn Error>> {
+    io::stdout().flush()?;
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
-
-    println!("{}: command not found", input.trim());
-
-    Ok(())
+    Ok(input)
 }
