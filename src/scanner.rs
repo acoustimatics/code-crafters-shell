@@ -57,7 +57,7 @@ impl<'a> Scanner<'a> {
 
         let token = match self.current {
             None => Token::new(TokenTag::EndOfCommand, String::from("")),
-            Some(c) if is_alpha(c) => {
+            Some(c) if is_alpha(c) || c == '_' => {
                 let lexeme = self.identifier();
                 Token::new(TokenTag::Identifier, lexeme)
             }
@@ -79,7 +79,7 @@ impl<'a> Scanner<'a> {
         let mut s = String::new();
         loop {
             match self.current {
-                Some(c) if is_alpha(c) || is_digit(c) => {
+                Some(c) if is_alpha(c) || is_digit(c) || c == '_' => {
                     s.push(c);
                     self.advance();
                 }
