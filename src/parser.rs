@@ -1,0 +1,114 @@
+//! A command parser.
+
+use crate::{ast::Command, scanner::*};
+
+/// Tracks and changes the state of the parser.
+struct ParserState<'a> {
+    /// A scanner to tokenize a command.
+    scanner: Scanner<'a>,
+
+    /// The current token in the command.
+    current: Token,
+}
+
+impl<'a> ParserState<'a> {
+    /// Creates and initialize a parser for a given command.
+    fn new(command: &str) -> Result<ParserState, String> {
+        let mut scanner = Scanner::new(command);
+        let current = scanner.next_token()?;
+        Ok(ParserState { scanner, current })
+    }
+
+    /// Advances to the next token.
+    fn advance(&mut self) -> Result<(), String> {
+        self.current = self.scanner.next_token()?;
+        Ok(())
+    }
+
+    /// Advances to the next token if the given tag matches the current token's
+    /// tag. Otherwise, an error is returned.
+    fn expect(&mut self, expected_tag: TokenTag) -> Result<(), String> {
+        if self.current.tag == expected_tag {
+            self.advance()?;
+            Ok(())
+        } else {
+            let message = format!(
+                "expected `{:?}` but got `{}`",
+                expected_tag, self.current.lexeme
+            );
+            Err(message)
+        }
+    }
+
+    fn expect_integer(&mut self) -> Result<String, String> {
+        if self.current.tag == TokenTag::Integer {
+            let lexeme = self.current.lexeme.clone();
+            self.advance()?;
+            Ok(lexeme)
+        } else {
+            let message = format!("expected integer but found `{}`", self.current.lexeme);
+            Err(message)
+        }
+    }
+
+    /// Returns whether the tag matches the current token. If the tags match
+    /// then we advance to the next token.
+    fn is_match(&mut self, tag: TokenTag) -> Result<bool, String> {
+        let is_match = self.current.tag == tag;
+        if is_match {
+            self.advance()?;
+        }
+        Ok(is_match)
+    }
+}
+
+/// Parses a given command text.
+pub fn parse(command_text: &str) -> Result<Command, String> {
+    let mut state = ParserState::new(command_text)?;
+    command(&mut state)
+}
+
+/// Parses a command.
+fn command(state: &mut ParserState) -> Result<Command, String> {
+    if state.is_match(TokenTag::EndOfCommand)? {
+        Ok(Command::Empty)
+    } else if state.current.tag == TokenTag::Identifier {
+        let command = match state.current.lexeme.as_ref() {
+            "exit" => exit(state)?,
+            _ => external(state)?,
+        };
+        state.expect(TokenTag::EndOfCommand)?;
+        Ok(command)
+    } else {
+        unimplemented!()
+    }
+}
+
+/// Parses an exit command.
+fn exit(state: &mut ParserState) -> Result<Command, String> {
+    assert!(state.current.tag == TokenTag::Identifier);
+    assert!(state.current.lexeme == "exit");
+    state.advance()?;
+    let integer_string = state.expect_integer()?;
+    match integer_string.parse() {
+        Ok(integer) => Ok(Command::Exit(integer)),
+        Err(_) => {
+            let message = format!(
+                "couldn't parse `{}` as a signed 32 bit integer",
+                integer_string
+            );
+            Err(message)
+        }
+    }
+}
+
+/// Parses an external command.
+fn external(state: &mut ParserState) -> Result<Command, String> {
+    assert!(state.current.tag == TokenTag::Identifier);
+    let mut args = Vec::new();
+    while state.current.tag != TokenTag::EndOfCommand {
+        args.push(state.current.lexeme.clone());
+        state.advance()?;
+    }
+    Ok(Command::External(args))
+}
