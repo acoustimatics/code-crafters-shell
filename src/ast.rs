@@ -6,6 +6,9 @@ pub enum Command {
     /// An empty command.
     Empty,
 
+    /// Echos back user input.
+    Echo(Vec<String>),
+
     /// Exits the shell with a return code.
     Exit(i32),
 

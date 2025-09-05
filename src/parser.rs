@@ -40,6 +40,8 @@ impl<'a> ParserState<'a> {
         }
     }
 
+    /// Advances to the next token if the current token is an integer.
+    /// Otherwise, an error is returned.
     fn expect_integer(&mut self) -> Result<String, String> {
         if self.current.tag == TokenTag::Integer {
             let lexeme = self.current.lexeme.clone();
@@ -74,6 +76,7 @@ fn command(state: &mut ParserState) -> Result<Command, String> {
         Ok(Command::Empty)
     } else if state.current.tag == TokenTag::Identifier {
         let command = match state.current.lexeme.as_ref() {
+            "echo" => echo(state)?,
             "exit" => exit(state)?,
             _ => external(state)?,
         };
@@ -82,6 +85,19 @@ fn command(state: &mut ParserState) -> Result<Command, String> {
     } else {
         unimplemented!()
     }
+}
+
+/// Parses an echo commmand.
+fn echo(state: &mut ParserState) -> Result<Command, String> {
+    assert!(state.current.tag == TokenTag::Identifier);
+    assert!(state.current.lexeme == "echo");
+    state.advance()?;
+    let mut args = Vec::new();
+    while state.current.tag != TokenTag::EndOfCommand {
+        args.push(state.current.lexeme.clone());
+        state.advance()?;
+    }
+    Ok(Command::Echo(args))
 }
 
 /// Parses an exit command.

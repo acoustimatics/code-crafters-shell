@@ -46,6 +46,16 @@ fn read() -> Result<String, String> {
 fn eval(command_text: &str) -> Result<(), String> {
     match parse(command_text)? {
         Command::Empty => Ok(()),
+        Command::Echo(args) => {
+            if args.len() > 0 {
+                print!("{}", args[0]);
+                for arg in args.iter().skip(1) {
+                    print!(" {}", arg);
+                }
+            }
+            println!("");
+            Ok(())
+        }
         Command::Exit(code) => {
             std::process::exit(code);
         }
