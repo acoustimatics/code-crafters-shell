@@ -13,9 +13,6 @@ pub enum TokenTag {
 
     /// An integer literal.
     Integer,
-
-    /// Generic text without any whitespace.
-    Text,
 }
 
 /// A token in a command text.
@@ -68,9 +65,9 @@ impl<'a> Scanner<'a> {
                 let lexeme = self.integer();
                 Token::new(TokenTag::Integer, lexeme)
             }
-            _ => {
-                let lexeme = self.text();
-                Token::new(TokenTag::Text, lexeme)
+            Some(c) => {
+                let msg = format!("unexpected character: {}", c);
+                return Err(msg);
             }
         };
 
@@ -98,21 +95,6 @@ impl<'a> Scanner<'a> {
         loop {
             match self.current {
                 Some(c) if is_digit(c) => {
-                    s.push(c);
-                    self.advance();
-                }
-                _ => break,
-            }
-        }
-        s
-    }
-
-    /// Scans text while there is not whitespace.
-    fn text(&mut self) -> String {
-        let mut s = String::new();
-        loop {
-            match self.current {
-                Some(c) if !is_whitespace(c) => {
                     s.push(c);
                     self.advance();
                 }
