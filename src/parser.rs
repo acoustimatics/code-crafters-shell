@@ -13,7 +13,7 @@ struct ParserState<'a> {
 
 impl<'a> ParserState<'a> {
     /// Creates and initialize a parser for a given command.
-    fn new(command: &str) -> Result<ParserState, String> {
+    fn new(command: &'a str) -> Result<ParserState<'a>, String> {
         let mut scanner = Scanner::new(command);
         let current = scanner.next_token()?;
         Ok(ParserState { scanner, current })
