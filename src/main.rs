@@ -64,5 +64,17 @@ fn eval(command_text: &str) -> Result<(), String> {
             let message = format!("{}: command not found", args[0]);
             Err(message)
         }
+        Command::Type(command) => {
+            match command.as_ref() {
+                "echo" | "exit" | "type" => {
+                    println!("{} is a shell builtin", command);
+                    Ok(())
+                }
+                _ => {
+                    let message = format!("{}: not found", command);
+                    Err(message)
+                }
+            }
+        }
     }
 }

@@ -14,4 +14,7 @@ pub enum Command {
 
     /// An external command.
     External(Vec<String>),
+
+    /// Displays the type of command.
+    Type(String),
 }

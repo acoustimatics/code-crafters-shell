@@ -40,15 +40,15 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    /// Advances to the next token if the current token is an integer.
-    /// Otherwise, an error is returned.
-    fn expect_integer(&mut self) -> Result<String, String> {
-        if self.current.tag == TokenTag::Integer {
+    /// If the current token matches the given tag, advances to the next token
+    /// and returns the matched lexeme. Otherwise, an error is returned.
+    fn expect_lexeme(&mut self, tag: TokenTag) -> Result<String, String> {
+        if self.current.tag == tag {
             let lexeme = self.current.lexeme.clone();
             self.advance()?;
             Ok(lexeme)
         } else {
-            let message = format!("expected integer but found `{}`", self.current.lexeme);
+            let message = format!("expected `{:?}` but found `{}`", tag, self.current.lexeme);
             Err(message)
         }
     }
@@ -78,6 +78,7 @@ fn command(state: &mut ParserState) -> Result<Command, String> {
         let command = match state.current.lexeme.as_ref() {
             "echo" => echo(state)?,
             "exit" => exit(state)?,
+            "type" => type_builtin(state)?,
             _ => external(state)?,
         };
         state.expect(TokenTag::EndOfCommand)?;
@@ -105,7 +106,7 @@ fn exit(state: &mut ParserState) -> Result<Command, String> {
     assert!(state.current.tag == TokenTag::Identifier);
     assert!(state.current.lexeme == "exit");
     state.advance()?;
-    let integer_string = state.expect_integer()?;
+    let integer_string = state.expect_lexeme(TokenTag::Integer)?;
     match integer_string.parse() {
         Ok(integer) => Ok(Command::Exit(integer)),
         Err(_) => {
@@ -116,6 +117,15 @@ fn exit(state: &mut ParserState) -> Result<Command, String> {
             Err(message)
         }
     }
+}
+
+/// Parses the `type` builtin.
+fn type_builtin(state: &mut ParserState) -> Result<Command, String> {
+    assert!(state.current.tag == TokenTag::Identifier);
+    assert!(state.current.lexeme == "type");
+    state.advance()?;
+    let command = state.expect_lexeme(TokenTag::Identifier)?;
+    Ok(Command::Type(command))
 }
 
 /// Parses an external command.
