@@ -1,0 +1,4 @@
+{
+    "name": "code-crafters-shell",
+    "image": "mcr.microsoft.com/devcontainers/rust:latest"
+}

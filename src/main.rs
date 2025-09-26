@@ -1,19 +1,24 @@
 mod ast;
 mod parser;
 mod scanner;
+mod system;
 
 use crate::ast::*;
 use crate::parser::*;
+use crate::system::get_path;
+use crate::system::search_for_file;
 use std::io::{self, Write};
+use std::path::PathBuf;
 
 fn main() {
-    repl();
+    let paths = get_path();
+    repl(&paths);
 }
 
 /// Read, eval, print loop.
-fn repl() -> ! {
+fn repl(paths: &[PathBuf]) -> ! {
     loop {
-        match read_eval() {
+        match read_eval(paths) {
             Ok(_) => {}
             Err(e) => eprintln!("{}", e),
         }
@@ -21,10 +26,10 @@ fn repl() -> ! {
 }
 
 /// Reads and evaluates a command.
-fn read_eval() -> Result<(), String> {
+fn read_eval(paths: &[PathBuf]) -> Result<(), String> {
     print!("$ ");
     let command_text = read()?;
-    eval(&command_text)?;
+    eval(paths, &command_text)?;
     Ok(())
 }
 
@@ -43,7 +48,7 @@ fn read() -> Result<String, String> {
 }
 
 /// Evaluates a command.
-fn eval(command_text: &str) -> Result<(), String> {
+fn eval(paths: &[PathBuf], command_text: &str) -> Result<(), String> {
     match parse(command_text)? {
         Command::Empty => Ok(()),
         Command::Echo(args) => {
@@ -64,17 +69,21 @@ fn eval(command_text: &str) -> Result<(), String> {
             let message = format!("{}: command not found", args[0]);
             Err(message)
         }
-        Command::Type(command) => {
-            match command.as_ref() {
-                "echo" | "exit" | "type" => {
-                    println!("{} is a shell builtin", command);
+        Command::Type(command) => match command.as_ref() {
+            "echo" | "exit" | "type" => {
+                println!("{} is a shell builtin", command);
+                Ok(())
+            }
+            _ => match search_for_file(paths, &command) {
+                Some(dir_entry) => {
+                    println!("{} is {}", command, dir_entry.path().display());
                     Ok(())
                 }
-                _ => {
+                None => {
                     let message = format!("{}: not found", command);
                     Err(message)
                 }
-            }
-        }
+            },
+        },
     }
 }
