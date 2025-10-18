@@ -6,7 +6,7 @@ mod system;
 use crate::ast::*;
 use crate::parser::*;
 use crate::system::get_path;
-use crate::system::search_for_file;
+use crate::system::search_for_executable_file;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
@@ -74,7 +74,7 @@ fn eval(paths: &[PathBuf], command_text: &str) -> Result<(), String> {
                 println!("{} is a shell builtin", command);
                 Ok(())
             }
-            _ => match search_for_file(paths, &command) {
+            _ => match search_for_executable_file(paths, &command) {
                 Some(dir_entry) => {
                     println!("{} is {}", command, dir_entry.path().display());
                     Ok(())

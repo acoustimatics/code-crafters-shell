@@ -18,8 +18,8 @@ pub fn get_path() -> Vec<PathBuf> {
     }
 }
 
-/// Searches for a file in a collection of paths.
-pub fn search_for_file(paths: &[PathBuf], file_name: &str) -> Option<DirEntry> {
+/// Searches for an executable file in a collection of paths.
+pub fn search_for_executable_file(paths: &[PathBuf], file_name: &str) -> Option<DirEntry> {
     for path in paths.iter() {
         if !path.exists() {
             continue;
