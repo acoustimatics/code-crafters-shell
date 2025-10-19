@@ -66,7 +66,7 @@ fn eval(paths: &[PathBuf], command_text: &str) -> Result<(), String> {
             Ok(_) => Ok(()),
             Err(e) => {
                 let message = match e.kind() {
-                    ErrorKind::NotFound => format!("cd: {}: no such file or directory", path),
+                    ErrorKind::NotFound => format!("cd: {}: No such file or directory", path),
                     _ => format!("{}", e),
                 };
                 Err(message)
