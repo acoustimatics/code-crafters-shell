@@ -62,6 +62,13 @@ fn eval(paths: &[PathBuf], command_text: &str) -> Result<(), String> {
             println!("");
             Ok(())
         }
+        Command::Cd(path) => match std::env::set_current_dir(path) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let message = format!("{}", e);
+                Err(message)
+            }
+        },
         Command::Exit(code) => {
             std::process::exit(code);
         }
@@ -81,20 +88,18 @@ fn eval(paths: &[PathBuf], command_text: &str) -> Result<(), String> {
                 }
             }
         }
-        Command::Pwd => {
-            match std::env::current_dir() {
-                Ok(current_dir) => {
-                    println!("{}", current_dir.display());
-                    Ok(())
-                }
-                Err(e) => {
-                    let message = format!("{}", e);
-                    Err(message)
-                }
+        Command::Pwd => match std::env::current_dir() {
+            Ok(current_dir) => {
+                println!("{}", current_dir.display());
+                Ok(())
             }
-        }
+            Err(e) => {
+                let message = format!("{}", e);
+                Err(message)
+            }
+        },
         Command::Type(command) => match command.as_ref() {
-            "echo" | "exit" | "pwd" | "type" => {
+            "cd" | "echo" | "exit" | "pwd" | "type" => {
                 println!("{} is a shell builtin", command);
                 Ok(())
             }

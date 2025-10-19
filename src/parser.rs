@@ -76,6 +76,7 @@ fn command(state: &mut ParserState) -> Result<Command, String> {
         Ok(Command::Empty)
     } else if state.current.tag == TokenTag::Word {
         let command = match state.current.lexeme.as_ref() {
+            "cd" => cd(state)?,
             "echo" => echo(state)?,
             "exit" => exit(state)?,
             "pwd" => pwd(state)?,
@@ -87,6 +88,15 @@ fn command(state: &mut ParserState) -> Result<Command, String> {
     } else {
         unimplemented!()
     }
+}
+
+/// Parses a cd command.
+fn cd(state: &mut ParserState) -> Result<Command, String> {
+    assert!(state.current.tag == TokenTag::Word);
+    assert!(state.current.lexeme == "cd");
+    state.advance()?;
+    let path = state.expect_lexeme(TokenTag::Word)?;
+    Ok(Command::Cd(path))
 }
 
 /// Parses an echo commmand.

@@ -3,6 +3,9 @@
 /// A shell command.
 #[derive(Debug)]
 pub enum Command {
+    /// Changes the working directory to a given path.
+    Cd(String),
+
     /// An empty command.
     Empty,
 
@@ -14,7 +17,7 @@ pub enum Command {
 
     /// An external command.
     External(Vec<String>),
-    
+
     /// Prints the working directory.
     Pwd,
 
