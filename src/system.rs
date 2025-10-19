@@ -1,4 +1,5 @@
 //! Contains all code dealing with system access.
+use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 
 use std::{
@@ -6,6 +7,20 @@ use std::{
     fs::{read_dir, DirEntry},
     path::PathBuf,
 };
+
+/// Changes the current directory.
+pub fn change_directory(path: &PathBuf) -> Result<(), String> {
+    match std::env::set_current_dir(path) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            let message = match e.kind() {
+                ErrorKind::NotFound => format!("cd: {}: No such file or directory", path.display()),
+                _ => format!("{}", e),
+            };
+            Err(message)
+        }
+    }
+}
 
 /// Gets a vector of all paths in the PATH environment variable.
 pub fn get_path() -> Vec<PathBuf> {

@@ -5,6 +5,7 @@ mod system;
 
 use crate::ast::*;
 use crate::parser::*;
+use crate::system::change_directory;
 use crate::system::get_path;
 use crate::system::search_for_executable_file;
 use std::io::ErrorKind;
@@ -62,16 +63,11 @@ fn eval(paths: &[PathBuf], command_text: &str) -> Result<(), String> {
             println!("");
             Ok(())
         }
-        Command::Cd(path) => match std::env::set_current_dir(&path) {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                let message = match e.kind() {
-                    ErrorKind::NotFound => format!("cd: {}: No such file or directory", path),
-                    _ => format!("{}", e),
-                };
-                Err(message)
-            }
+        Command::Cd(path) if path == "~" => match std::env::home_dir() {
+            Some(home) => change_directory(&home),
+            None => Err(String::from("cd: Home directory is unknown")),
         },
+        Command::Cd(path) => change_directory(&PathBuf::from(path)),
         Command::Exit(code) => {
             std::process::exit(code);
         }
