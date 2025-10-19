@@ -7,6 +7,7 @@ use crate::ast::*;
 use crate::parser::*;
 use crate::system::get_path;
 use crate::system::search_for_executable_file;
+use std::io::ErrorKind;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
@@ -67,19 +68,15 @@ fn eval(paths: &[PathBuf], command_text: &str) -> Result<(), String> {
         Command::External(args) => {
             assert!(args.len() > 0);
             let command = &args[0];
-            match search_for_executable_file(paths, &command) {
-                Some(_) => {
-                    let args = args.iter().skip(1);
-                    let status = std::process::Command::new(command)
-                        .args(args)
-                        .status();
-                    if let Err(e) = status {
-                        eprintln!("{}", e);
-                    }
-                    Ok(())
-                }
-                None => {
-                    let message = format!("{}: command not found", args[0]);
+            let args = args.iter().skip(1);
+            let status = std::process::Command::new(command).args(args).status();
+            match status {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    let message = match e.kind() {
+                        ErrorKind::NotFound => format!("{}: command not found", command),
+                        kind => format!("[{}] {}", kind, e),
+                    };
                     Err(message)
                 }
             }
