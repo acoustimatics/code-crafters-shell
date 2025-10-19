@@ -78,6 +78,7 @@ fn command(state: &mut ParserState) -> Result<Command, String> {
         let command = match state.current.lexeme.as_ref() {
             "echo" => echo(state)?,
             "exit" => exit(state)?,
+            "pwd" => pwd(state)?,
             "type" => type_builtin(state)?,
             _ => external(state)?,
         };
@@ -117,6 +118,14 @@ fn exit(state: &mut ParserState) -> Result<Command, String> {
             Err(message)
         }
     }
+}
+
+/// Parses a pwd command.
+fn pwd(state: &mut ParserState) -> Result<Command, String> {
+    assert!(state.current.tag == TokenTag::Word);
+    assert!(state.current.lexeme == "pwd");
+    state.advance()?;
+    Ok(Command::Pwd)
 }
 
 /// Parses the `type` builtin.

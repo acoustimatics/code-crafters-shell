@@ -75,8 +75,20 @@ fn eval(paths: &[PathBuf], command_text: &str) -> Result<(), String> {
                 Err(e) => {
                     let message = match e.kind() {
                         ErrorKind::NotFound => format!("{}: command not found", command),
-                        kind => format!("[{}] {}", kind, e),
+                        _ => format!("{}", e),
                     };
+                    Err(message)
+                }
+            }
+        }
+        Command::Pwd => {
+            match std::env::current_dir() {
+                Ok(current_dir) => {
+                    println!("{}", current_dir.display());
+                    Ok(())
+                }
+                Err(e) => {
+                    let message = format!("{}", e);
                     Err(message)
                 }
             }

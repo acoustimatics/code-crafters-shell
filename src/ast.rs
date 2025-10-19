@@ -14,6 +14,9 @@ pub enum Command {
 
     /// An external command.
     External(Vec<String>),
+    
+    /// Prints the working directory.
+    Pwd,
 
     /// Displays the type of command.
     Type(String),
