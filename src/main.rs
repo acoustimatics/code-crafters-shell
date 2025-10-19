@@ -62,10 +62,13 @@ fn eval(paths: &[PathBuf], command_text: &str) -> Result<(), String> {
             println!("");
             Ok(())
         }
-        Command::Cd(path) => match std::env::set_current_dir(path) {
+        Command::Cd(path) => match std::env::set_current_dir(&path) {
             Ok(_) => Ok(()),
             Err(e) => {
-                let message = format!("{}", e);
+                let message = match e.kind() {
+                    ErrorKind::NotFound => format!("cd: {}: no such file or directory", path),
+                    _ => format!("{}", e),
+                };
                 Err(message)
             }
         },
