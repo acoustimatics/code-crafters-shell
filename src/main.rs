@@ -94,7 +94,7 @@ fn eval(paths: &[PathBuf], command_text: &str) -> Result<(), String> {
             }
         }
         Command::Type(command) => match command.as_ref() {
-            "echo" | "exit" | "type" => {
+            "echo" | "exit" | "pwd" | "type" => {
                 println!("{} is a shell builtin", command);
                 Ok(())
             }
