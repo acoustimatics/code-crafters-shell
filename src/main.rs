@@ -68,8 +68,7 @@ fn eval(paths: &[PathBuf], command_text: &str) -> Result<(), String> {
             assert!(args.len() > 0);
             let command = &args[0];
             match search_for_executable_file(paths, &command) {
-                Some(dir_entry) => {
-                    let command = dir_entry.path();
+                Some(_) => {
                     let args = args.iter().skip(1);
                     let status = std::process::Command::new(command)
                         .args(args)
