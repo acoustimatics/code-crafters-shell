@@ -74,7 +74,7 @@ pub fn parse(command_text: &str) -> Result<Command, String> {
 fn command(state: &mut ParserState) -> Result<Command, String> {
     if state.is_match(TokenTag::EndOfCommand)? {
         Ok(Command::Empty)
-    } else if state.current.tag == TokenTag::Identifier {
+    } else if state.current.tag == TokenTag::Word {
         let command = match state.current.lexeme.as_ref() {
             "echo" => echo(state)?,
             "exit" => exit(state)?,
@@ -90,7 +90,7 @@ fn command(state: &mut ParserState) -> Result<Command, String> {
 
 /// Parses an echo commmand.
 fn echo(state: &mut ParserState) -> Result<Command, String> {
-    assert!(state.current.tag == TokenTag::Identifier);
+    assert!(state.current.tag == TokenTag::Word);
     assert!(state.current.lexeme == "echo");
     state.advance()?;
     let mut args = Vec::new();
@@ -103,7 +103,7 @@ fn echo(state: &mut ParserState) -> Result<Command, String> {
 
 /// Parses an exit command.
 fn exit(state: &mut ParserState) -> Result<Command, String> {
-    assert!(state.current.tag == TokenTag::Identifier);
+    assert!(state.current.tag == TokenTag::Word);
     assert!(state.current.lexeme == "exit");
     state.advance()?;
     let integer_string = state.expect_lexeme(TokenTag::Integer)?;
@@ -121,16 +121,16 @@ fn exit(state: &mut ParserState) -> Result<Command, String> {
 
 /// Parses the `type` builtin.
 fn type_builtin(state: &mut ParserState) -> Result<Command, String> {
-    assert!(state.current.tag == TokenTag::Identifier);
+    assert!(state.current.tag == TokenTag::Word);
     assert!(state.current.lexeme == "type");
     state.advance()?;
-    let command = state.expect_lexeme(TokenTag::Identifier)?;
+    let command = state.expect_lexeme(TokenTag::Word)?;
     Ok(Command::Type(command))
 }
 
 /// Parses an external command.
 fn external(state: &mut ParserState) -> Result<Command, String> {
-    assert!(state.current.tag == TokenTag::Identifier);
+    assert!(state.current.tag == TokenTag::Word);
     let mut args = Vec::new();
     while state.current.tag != TokenTag::EndOfCommand {
         args.push(state.current.lexeme.clone());

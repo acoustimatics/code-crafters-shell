@@ -66,8 +66,24 @@ fn eval(paths: &[PathBuf], command_text: &str) -> Result<(), String> {
         }
         Command::External(args) => {
             assert!(args.len() > 0);
-            let message = format!("{}: command not found", args[0]);
-            Err(message)
+            let command = &args[0];
+            match search_for_executable_file(paths, &command) {
+                Some(dir_entry) => {
+                    let command = dir_entry.path();
+                    let args = args.iter().skip(1);
+                    let status = std::process::Command::new(command)
+                        .args(args)
+                        .status();
+                    if let Err(e) = status {
+                        eprintln!("{}", e);
+                    }
+                    Ok(())
+                }
+                None => {
+                    let message = format!("{}: command not found", args[0]);
+                    Err(message)
+                }
+            }
         }
         Command::Type(command) => match command.as_ref() {
             "echo" | "exit" | "type" => {

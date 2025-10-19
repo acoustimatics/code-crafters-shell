@@ -8,11 +8,12 @@ pub enum TokenTag {
     /// The end of the command text.
     EndOfCommand,
 
-    /// An identifier.
-    Identifier,
-
     /// An integer literal.
     Integer,
+
+    /// A word which is a string of non-whitespace characters that doesn't
+    /// start with a digit.
+    Word,
 }
 
 /// A token in a command text.
@@ -57,29 +58,25 @@ impl<'a> Scanner<'a> {
 
         let token = match self.current {
             None => Token::new(TokenTag::EndOfCommand, String::from("")),
-            Some(c) if is_alpha(c) || c == '_' => {
-                let lexeme = self.identifier();
-                Token::new(TokenTag::Identifier, lexeme)
-            }
             Some(c) if is_digit(c) => {
                 let lexeme = self.integer();
                 Token::new(TokenTag::Integer, lexeme)
             }
-            Some(c) => {
-                let msg = format!("unexpected character: {}", c);
-                return Err(msg);
+            Some(_) => {
+                let lexeme = self.word();
+                Token::new(TokenTag::Word, lexeme)
             }
         };
 
         Ok(token)
     }
 
-    /// Scans an identifier token.
-    fn identifier(&mut self) -> String {
+    /// Scans a word token.
+    fn word(&mut self) -> String {
         let mut s = String::new();
         loop {
             match self.current {
-                Some(c) if is_alpha(c) || is_digit(c) || c == '_' => {
+                Some(c) if !is_whitespace(c) => {
                     s.push(c);
                     self.advance();
                 }
@@ -118,11 +115,6 @@ impl<'a> Scanner<'a> {
     fn advance(&mut self) {
         self.current = self.chars.next();
     }
-}
-
-/// Determines if the given character is alphabetic.
-fn is_alpha(c: char) -> bool {
-    c.is_ascii_alphabetic()
 }
 
 /// Determines if the given character is a digit.
