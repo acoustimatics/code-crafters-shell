@@ -37,15 +37,18 @@ impl Token {
 enum WordState {
     /// Normal state.
     Normal,
-    
+
     /// Inside single quoted text.
-    InSingleQuote, 
-    
+    InSingleQuote,
+
     /// Inside double quoted text.
     InDoubleQuote,
-    
+
     /// Previous character was a backspace.
     BackSpace,
+
+    /// Previous character was a backspace inside double quotes.
+    QuotedBackSpace,
 }
 
 /// Converts a command's text into a stream of tokens.
@@ -100,8 +103,12 @@ impl<'a> Scanner<'a> {
                     state = BackSpace;
                 }
 
-                (Some('\\'), InSingleQuote) | (Some('\\'), InDoubleQuote) => {
+                (Some('\\'), InSingleQuote) => {
                     s.push('\\');
+                }
+
+                (Some('\\'), InDoubleQuote) => {
+                    state = QuotedBackSpace;
                 }
 
                 (Some('\''), Normal) => {
@@ -140,6 +147,17 @@ impl<'a> Scanner<'a> {
                     s.push(c);
                 }
 
+                (Some(c), QuotedBackSpace) if c == '"' || c == '\\' => {
+                    state = InDoubleQuote;
+                    s.push(c);
+                }
+
+                (Some(c), QuotedBackSpace) => {
+                    state = InDoubleQuote;
+                    s.push('\\');
+                    s.push(c);
+                }
+
                 (Some(c), BackSpace) => {
                     state = Normal;
                     s.push(c);
@@ -156,7 +174,7 @@ impl<'a> Scanner<'a> {
                     return Err(message);
                 }
 
-                (None, InDoubleQuote) => {
+                (None, InDoubleQuote) | (None, QuotedBackSpace) => {
                     let message = String::from("unclosed double quote");
                     return Err(message);
                 }
