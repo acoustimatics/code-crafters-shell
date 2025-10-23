@@ -32,6 +32,19 @@ impl Token {
     }
 }
 
+/// Possible states when scanning a word token.
+#[derive(Clone, Copy)]
+enum WordState {
+    /// Normal state.
+    Normal,
+    
+    /// Inside single quoted text.
+    InSingleQuote, 
+    
+    /// Inside double quoted text.
+    InDoubleQuote,
+}
+
 /// Converts a command's text into a stream of tokens.
 pub struct Scanner<'a> {
     /// An iterator over the command text.
@@ -73,36 +86,73 @@ impl<'a> Scanner<'a> {
 
     /// Scans a quoted word.
     fn word(&mut self) -> Result<String, String> {
-        let mut in_quote = false;
+        use WordState::*;
+
+        let mut state = Normal;
         let mut s = String::new();
 
         loop {
-            match self.current {
-                Some('\'') => {
-                    in_quote = !in_quote;
+            match (self.current, state) {
+                (Some('\''), Normal) => {
+                    state = InSingleQuote;
                     self.advance();
                 }
 
-                Some(c) if is_whitespace(c) && in_quote => {
-                    s.push(c);
+                (Some('\''), InSingleQuote) => {
+                    state = Normal;
                     self.advance();
                 }
 
-                Some(c) if is_whitespace(c) => {
+                (Some('\''), InDoubleQuote) => {
+                    s.push('\'');
+                    self.advance();
+                }
+
+                (Some('"'), Normal) => {
+                    state = InDoubleQuote;
+                    self.advance();
+                }
+
+                (Some('"'), InSingleQuote) => {
+                    s.push('"');
+                    self.advance();
+                }
+
+                (Some('"'), InDoubleQuote) => {
+                    state = Normal;
+                    self.advance();
+                }
+
+                (Some(c), Normal) if is_whitespace(c) => {
                     break;
                 }
 
-                Some(c) => {
+                (Some(c), InSingleQuote) if is_whitespace(c) => {
                     s.push(c);
                     self.advance();
                 }
 
-                None if in_quote => {
-                    let message = String::from("unclosed quote");
+                (Some(c), InDoubleQuote) if is_whitespace(c) => {
+                    s.push(c);
+                    self.advance();
+                }
+
+                (Some(c), _) => {
+                    s.push(c);
+                    self.advance();
+                }
+
+                (None, Normal) => break,
+
+                (None, InSingleQuote) => {
+                    let message = String::from("unclosed single quote");
                     return Err(message);
                 }
 
-                None => break,
+                (None, InDoubleQuote) => {
+                    let message = String::from("unclosed double quote");
+                    return Err(message);
+                }
             }
         }
 
