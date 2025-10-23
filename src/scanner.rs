@@ -63,7 +63,7 @@ impl<'a> Scanner<'a> {
                 Token::new(TokenTag::Integer, lexeme)
             }
             Some(_) => {
-                let lexeme = self.word();
+                let lexeme = self.word()?;
                 Token::new(TokenTag::Word, lexeme)
             }
         };
@@ -71,19 +71,42 @@ impl<'a> Scanner<'a> {
         Ok(token)
     }
 
-    /// Scans a word token.
-    fn word(&mut self) -> String {
+    /// Scans a quoted word.
+    fn word(&mut self) -> Result<String, String> {
+        let mut in_quote = false;
         let mut s = String::new();
+
         loop {
             match self.current {
-                Some(c) if !is_whitespace(c) => {
+                Some('\'') => {
+                    in_quote = !in_quote;
+                    self.advance();
+                }
+
+                Some(c) if is_whitespace(c) && in_quote => {
                     s.push(c);
                     self.advance();
                 }
-                _ => break,
+
+                Some(c) if is_whitespace(c) => {
+                    break;
+                }
+
+                Some(c) => {
+                    s.push(c);
+                    self.advance();
+                }
+
+                None if in_quote => {
+                    let message = String::from("unclosed quote");
+                    return Err(message);
+                }
+
+                None => break,
             }
         }
-        s
+
+        Ok(s)
     }
 
     /// Scans an integer token.
