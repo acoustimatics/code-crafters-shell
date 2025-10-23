@@ -43,6 +43,9 @@ enum WordState {
     
     /// Inside double quoted text.
     InDoubleQuote,
+    
+    /// Previous character was a backspace.
+    BackSpace,
 }
 
 /// Converts a command's text into a stream of tokens.
@@ -93,34 +96,36 @@ impl<'a> Scanner<'a> {
 
         loop {
             match (self.current, state) {
+                (Some('\\'), Normal) => {
+                    state = BackSpace;
+                }
+
+                (Some('\\'), InSingleQuote) | (Some('\\'), InDoubleQuote) => {
+                    s.push('\\');
+                }
+
                 (Some('\''), Normal) => {
                     state = InSingleQuote;
-                    self.advance();
                 }
 
                 (Some('\''), InSingleQuote) => {
                     state = Normal;
-                    self.advance();
                 }
 
                 (Some('\''), InDoubleQuote) => {
                     s.push('\'');
-                    self.advance();
                 }
 
                 (Some('"'), Normal) => {
                     state = InDoubleQuote;
-                    self.advance();
                 }
 
                 (Some('"'), InSingleQuote) => {
                     s.push('"');
-                    self.advance();
                 }
 
                 (Some('"'), InDoubleQuote) => {
                     state = Normal;
-                    self.advance();
                 }
 
                 (Some(c), Normal) if is_whitespace(c) => {
@@ -129,17 +134,19 @@ impl<'a> Scanner<'a> {
 
                 (Some(c), InSingleQuote) if is_whitespace(c) => {
                     s.push(c);
-                    self.advance();
                 }
 
                 (Some(c), InDoubleQuote) if is_whitespace(c) => {
                     s.push(c);
-                    self.advance();
+                }
+
+                (Some(c), BackSpace) => {
+                    state = Normal;
+                    s.push(c);
                 }
 
                 (Some(c), _) => {
                     s.push(c);
-                    self.advance();
                 }
 
                 (None, Normal) => break,
@@ -153,7 +160,14 @@ impl<'a> Scanner<'a> {
                     let message = String::from("unclosed double quote");
                     return Err(message);
                 }
+
+                (None, BackSpace) => {
+                    let message = String::from("dangling back space");
+                    return Err(message);
+                }
             }
+
+            self.advance();
         }
 
         Ok(s)
