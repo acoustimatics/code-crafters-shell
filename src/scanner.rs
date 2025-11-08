@@ -9,7 +9,13 @@ pub enum TokenTag {
     EndOfCommand,
 
     /// An integer literal.
-    Integer,
+    Integer(i32),
+
+    /// Output redirection operator `>`.
+    RedirectOut,
+    
+    /// Output redirection opterator with a file descriptor, e.g. `1>`.
+    RedirectOutWithFileDescriptor(i32),
 
     /// A word which is a string of non-whitespace characters that doesn't
     /// start with a digit.
@@ -77,9 +83,13 @@ impl<'a> Scanner<'a> {
 
         let token = match self.current {
             None => Token::new(TokenTag::EndOfCommand, String::from("")),
+            Some('>') => {
+                self.advance();
+                let lexeme = String::from(">");
+                Token::new(TokenTag::RedirectOut, lexeme)
+            }
             Some(c) if is_digit(c) => {
-                let lexeme = self.integer();
-                Token::new(TokenTag::Integer, lexeme)
+                self.integer()?
             }
             Some(_) => {
                 let lexeme = self.word()?;
@@ -192,18 +202,32 @@ impl<'a> Scanner<'a> {
     }
 
     /// Scans an integer token.
-    fn integer(&mut self) -> String {
-        let mut s = String::new();
+    fn integer(&mut self) -> Result<Token, String> {
+        let mut lexeme = String::new();
         loop {
             match self.current {
                 Some(c) if is_digit(c) => {
-                    s.push(c);
+                    lexeme.push(c);
                     self.advance();
                 }
                 _ => break,
             }
         }
-        s
+        
+        let i = parse_i32(&lexeme)?;
+
+        let tag = match self.current {
+            Some('>') => {
+                lexeme.push('>');
+                self.advance();
+                TokenTag::RedirectOutWithFileDescriptor(i)               
+            }
+            _ => {
+                TokenTag::Integer(i)
+            }
+        };
+        
+        Ok(Token::new(tag, lexeme))
     }
 
     /// Advances the scanner past any whitespace.
@@ -219,6 +243,19 @@ impl<'a> Scanner<'a> {
     /// Advances `current` to the next character in command text.
     fn advance(&mut self) {
         self.current = self.chars.next();
+    }
+}
+
+/// Parse string as an `i32` with a custom error result.
+fn parse_i32(s: &str) -> Result<i32, String> {
+    match s.parse() {
+        Ok(i) => Ok(i),
+        Err(_) => {
+            let message = format!(
+                "couldn't parse `{s}` as a signed 32 bit integer"
+            );
+            Err(message)
+        }
     }
 }
 

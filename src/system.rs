@@ -8,8 +8,10 @@ use std::{
     path::PathBuf,
 };
 
+use crate::eval_result::{EvalError, EvalResult};
+
 /// Changes the current directory.
-pub fn change_directory(path: &PathBuf) -> Result<(), String> {
+pub fn change_directory(path: &PathBuf) -> EvalResult {
     match std::env::set_current_dir(path) {
         Ok(_) => Ok(()),
         Err(e) => {
@@ -17,7 +19,7 @@ pub fn change_directory(path: &PathBuf) -> Result<(), String> {
                 ErrorKind::NotFound => format!("cd: {}: No such file or directory", path.display()),
                 _ => format!("{}", e),
             };
-            Err(message)
+            EvalError::new(message).as_eval_result()
         }
     }
 }
