@@ -13,7 +13,7 @@ pub enum TokenTag {
 
     /// Output redirection operator `>`.
     RedirectOut,
-    
+
     /// Output redirection opterator with a file descriptor, e.g. `1>`.
     RedirectOutWithFileDescriptor(i32),
 
@@ -88,9 +88,7 @@ impl<'a> Scanner<'a> {
                 let lexeme = String::from(">");
                 Token::new(TokenTag::RedirectOut, lexeme)
             }
-            Some(c) if is_digit(c) => {
-                self.integer()?
-            }
+            Some(c) if is_digit(c) => self.integer()?,
             Some(_) => {
                 let lexeme = self.word()?;
                 Token::new(TokenTag::Word, lexeme)
@@ -213,20 +211,18 @@ impl<'a> Scanner<'a> {
                 _ => break,
             }
         }
-        
+
         let i = parse_i32(&lexeme)?;
 
         let tag = match self.current {
             Some('>') => {
                 lexeme.push('>');
                 self.advance();
-                TokenTag::RedirectOutWithFileDescriptor(i)               
+                TokenTag::RedirectOutWithFileDescriptor(i)
             }
-            _ => {
-                TokenTag::Integer(i)
-            }
+            _ => TokenTag::Integer(i),
         };
-        
+
         Ok(Token::new(tag, lexeme))
     }
 
@@ -251,9 +247,7 @@ fn parse_i32(s: &str) -> Result<i32, String> {
     match s.parse() {
         Ok(i) => Ok(i),
         Err(_) => {
-            let message = format!(
-                "couldn't parse `{s}` as a signed 32 bit integer"
-            );
+            let message = format!("couldn't parse `{s}` as a signed 32 bit integer");
             Err(message)
         }
     }

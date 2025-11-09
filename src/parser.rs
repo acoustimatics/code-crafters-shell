@@ -92,17 +92,20 @@ fn redirection(state: &mut ParserState) -> Result<Option<Redirection>, String> {
         TokenTag::RedirectOutWithFileDescriptor(file_descriptor) => Some(file_descriptor),
         _ => None,
     };
-    
+
     let redirection = match file_descriptor {
         Some(file_descriptor) => {
             state.advance()?;
             let target = state.expect_lexeme(TokenTag::Word)?;
-            let redirection = Redirection::Output { file_descriptor, target };
+            let redirection = Redirection::Output {
+                file_descriptor,
+                target,
+            };
             Some(redirection)
         }
         None => None,
     };
-    
+
     Ok(redirection)
 }
 
@@ -186,14 +189,9 @@ fn type_builtin(state: &mut ParserState) -> Result<BuiltIn, String> {
 /// Collects tokens into a vector as long as they are Word or Integer.
 fn collect_integer_word(state: &mut ParserState) -> Result<Vec<String>, String> {
     let mut items = Vec::new();
-    loop {
-        match state.current.tag {
-            TokenTag::Word | TokenTag::Integer(_) => {
-                items.push(state.current.lexeme.clone());
-                state.advance()?;
-            }
-            _ => break,
-        }
+    while let TokenTag::Word | TokenTag::Integer(_) = state.current.tag {
+        items.push(state.current.lexeme.clone());
+        state.advance()?;
     }
     Ok(items)
 }

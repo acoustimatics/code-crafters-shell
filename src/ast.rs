@@ -13,7 +13,7 @@ impl Command {
     pub fn new(simple_command: SimpleCommand, redirection: Option<Redirection>) -> Command {
         Command {
             simple_command,
-            redirection: redirection,
+            redirection,
         }
     }
 }
@@ -49,5 +49,8 @@ pub enum BuiltIn {
 /// A redirection operator.
 pub enum Redirection {
     /// Redirects output from a file descriptor to a destination.
-    Output { file_descriptor: i32, target: String },
+    Output {
+        file_descriptor: i32,
+        target: String,
+    },
 }

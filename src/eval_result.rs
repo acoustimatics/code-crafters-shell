@@ -20,11 +20,6 @@ impl EvalError {
         let message = String::from(message);
         EvalError { message }
     }
-
-    pub fn as_eval_result(self) -> EvalResult {
-        let boxed_self: Box<dyn Error> = Box::new(self);
-        Err(boxed_self)
-    }
 }
 
 impl fmt::Display for EvalError {
@@ -34,3 +29,9 @@ impl fmt::Display for EvalError {
 }
 
 impl Error for EvalError {}
+
+/// Creates an `EvalResult` with a given `EvalError`.
+pub fn eval_result(eval_error: EvalError) -> EvalResult {
+    let boxed_self: Box<dyn Error> = Box::new(eval_error);
+    Err(boxed_self)
+}
