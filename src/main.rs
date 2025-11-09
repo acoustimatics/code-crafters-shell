@@ -1,13 +1,11 @@
 mod ast;
-mod eval_result;
+mod error;
 mod parser;
 mod scanner;
 mod system;
 
 use crate::ast::*;
-use crate::eval_result::eval_result;
-use crate::eval_result::EvalError;
-use crate::eval_result::EvalResult;
+use crate::error::EvalError;
 use crate::parser::*;
 use crate::system::change_directory;
 use crate::system::get_path;
@@ -34,28 +32,23 @@ fn repl(paths: &[PathBuf]) -> ! {
 }
 
 /// Reads and evaluates a command.
-fn read_eval(paths: &[PathBuf]) -> EvalResult {
+fn read_eval(paths: &[PathBuf]) -> anyhow::Result<()> {
     print!("$ ");
     let command_text = read()?;
     eval(paths, &command_text)
 }
 
 /// Reads a command.
-fn read() -> Result<String, String> {
-    match io::stdout().flush() {
-        Ok(_) => {}
-        Err(e) => return Err(format!("{}", e)),
-    }
+fn read() -> anyhow::Result<String> {
+    io::stdout().flush()?;
 
     let mut input = String::new();
-    match io::stdin().read_line(&mut input) {
-        Ok(_) => Ok(input),
-        Err(e) => Err(format!("{}", e)),
-    }
+    _ = io::stdin().read_line(&mut input)?;
+    Ok(input)
 }
 
 /// Parses and evaluates a command.
-fn eval(paths: &[PathBuf], command_text: &str) -> EvalResult {
+fn eval(paths: &[PathBuf], command_text: &str) -> anyhow::Result<()> {
     let Some(command) = parse(command_text)? else {
         return Ok(());
     };
@@ -63,7 +56,7 @@ fn eval(paths: &[PathBuf], command_text: &str) -> EvalResult {
 }
 
 /// Evaluates a command.
-fn eval_command(paths: &[PathBuf], command: Command) -> EvalResult {
+fn eval_command(paths: &[PathBuf], command: Command) -> anyhow::Result<()> {
     match command.simple_command {
         SimpleCommand::BuiltIn(built_in) => {
             let mut stdio: Box<dyn Write> = match command.redirection {
@@ -76,7 +69,7 @@ fn eval_command(paths: &[PathBuf], command: Command) -> EvalResult {
                     file_descriptor, ..
                 }) => {
                     let message = format!("unrecognized file descriptor `{file_descriptor}`");
-                    return eval_result(EvalError::new(message));
+                    Err(EvalError::new(message))?
                 }
             };
             eval_built_in(paths, &mut stdio, built_in)
@@ -95,7 +88,7 @@ fn eval_command(paths: &[PathBuf], command: Command) -> EvalResult {
                     file_descriptor, ..
                 }) => {
                     let message = format!("unrecognized file descriptor `{file_descriptor}`");
-                    return eval_result(EvalError::new(message));
+                    Err(EvalError::new(message))?
                 }
             };
             eval_external(args, stdio)
@@ -104,7 +97,11 @@ fn eval_command(paths: &[PathBuf], command: Command) -> EvalResult {
 }
 
 /// Evaluates a built in command.
-fn eval_built_in(paths: &[PathBuf], stdio: &mut Box<dyn Write>, built_in: BuiltIn) -> EvalResult {
+fn eval_built_in(
+    paths: &[PathBuf],
+    stdio: &mut Box<dyn Write>,
+    built_in: BuiltIn,
+) -> anyhow::Result<()> {
     match built_in {
         BuiltIn::Echo(args) => {
             if !args.is_empty() {
@@ -118,7 +115,7 @@ fn eval_built_in(paths: &[PathBuf], stdio: &mut Box<dyn Write>, built_in: BuiltI
         }
         BuiltIn::Cd(path) if path == "~" => match std::env::home_dir() {
             Some(home) => change_directory(&home),
-            None => eval_result(EvalError::from_str("cd: Home directory is unknown")),
+            None => Err(EvalError::from_str("cd: Home directory is unknown"))?,
         },
         BuiltIn::Cd(path) => change_directory(&PathBuf::from(path)),
         BuiltIn::Exit(code) => {
@@ -131,7 +128,7 @@ fn eval_built_in(paths: &[PathBuf], stdio: &mut Box<dyn Write>, built_in: BuiltI
             }
             Err(e) => {
                 let message = format!("{}", e);
-                eval_result(EvalError::new(message))
+                Err(EvalError::new(message))?
             }
         },
         BuiltIn::Type(command) => match command.as_ref() {
@@ -146,7 +143,7 @@ fn eval_built_in(paths: &[PathBuf], stdio: &mut Box<dyn Write>, built_in: BuiltI
                 }
                 None => {
                     let message = format!("{}: not found", command);
-                    eval_result(EvalError::new(message))
+                    Err(EvalError::new(message))?
                 }
             },
         },
@@ -154,7 +151,7 @@ fn eval_built_in(paths: &[PathBuf], stdio: &mut Box<dyn Write>, built_in: BuiltI
 }
 
 /// Evaluates an external command, e.g. `cd`.
-fn eval_external(args: Vec<String>, stdio: Stdio) -> EvalResult {
+fn eval_external(args: Vec<String>, stdio: Stdio) -> anyhow::Result<()> {
     assert!(!args.is_empty());
     let command = &args[0];
     let args = args.iter().skip(1);
@@ -169,7 +166,7 @@ fn eval_external(args: Vec<String>, stdio: Stdio) -> EvalResult {
                 ErrorKind::NotFound => format!("{}: command not found", command),
                 _ => format!("{}", e),
             };
-            eval_result(EvalError::new(message))
+            Err(EvalError::new(message))?
         }
     }
 }

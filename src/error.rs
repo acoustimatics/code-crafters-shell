@@ -2,9 +2,6 @@
 
 use std::{error::Error, fmt};
 
-/// A Result type for the shell's eval functions.
-pub type EvalResult = Result<(), Box<dyn Error>>;
-
 /// An error type for any custom error during evaluation.
 #[derive(Debug)]
 pub struct EvalError {
@@ -29,9 +26,3 @@ impl fmt::Display for EvalError {
 }
 
 impl Error for EvalError {}
-
-/// Creates an `EvalResult` with a given `EvalError`.
-pub fn eval_result(eval_error: EvalError) -> EvalResult {
-    let boxed_self: Box<dyn Error> = Box::new(eval_error);
-    Err(boxed_self)
-}

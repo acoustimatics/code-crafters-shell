@@ -2,6 +2,8 @@
 
 use std::str::Chars;
 
+use anyhow::anyhow;
+
 /// A token type.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenTag {
@@ -78,7 +80,7 @@ impl<'a> Scanner<'a> {
     }
 
     /// Returns the next token in the command text.
-    pub fn next_token(&mut self) -> Result<Token, String> {
+    pub fn next_token(&mut self) -> anyhow::Result<Token> {
         self.skip_whitespace();
 
         let token = match self.current {
@@ -99,7 +101,7 @@ impl<'a> Scanner<'a> {
     }
 
     /// Scans a quoted word.
-    fn word(&mut self) -> Result<String, String> {
+    fn word(&mut self) -> anyhow::Result<String> {
         use WordState::*;
 
         let mut state = Normal;
@@ -177,20 +179,13 @@ impl<'a> Scanner<'a> {
 
                 (None, Normal) => break,
 
-                (None, InSingleQuote) => {
-                    let message = String::from("unclosed single quote");
-                    return Err(message);
-                }
+                (None, InSingleQuote) => Err(anyhow!("unclosed single quote"))?,
 
                 (None, InDoubleQuote) | (None, QuotedBackSpace) => {
-                    let message = String::from("unclosed double quote");
-                    return Err(message);
+                    Err(anyhow!("unclosed double quote"))?
                 }
 
-                (None, BackSpace) => {
-                    let message = String::from("dangling back space");
-                    return Err(message);
-                }
+                (None, BackSpace) => Err(anyhow!("dangling back space"))?,
             }
 
             self.advance();
@@ -200,7 +195,7 @@ impl<'a> Scanner<'a> {
     }
 
     /// Scans an integer token.
-    fn integer(&mut self) -> Result<Token, String> {
+    fn integer(&mut self) -> anyhow::Result<Token> {
         let mut lexeme = String::new();
         loop {
             match self.current {
@@ -243,13 +238,10 @@ impl<'a> Scanner<'a> {
 }
 
 /// Parse string as an `i32` with a custom error result.
-fn parse_i32(s: &str) -> Result<i32, String> {
+fn parse_i32(s: &str) -> anyhow::Result<i32> {
     match s.parse() {
         Ok(i) => Ok(i),
-        Err(_) => {
-            let message = format!("couldn't parse `{s}` as a signed 32 bit integer");
-            Err(message)
-        }
+        Err(_) => Err(anyhow!("couldn't parse `{s}` as a signed 32 bit integer")),
     }
 }
 
