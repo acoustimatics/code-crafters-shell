@@ -12,11 +12,6 @@ impl EvalError {
     pub fn new(message: String) -> EvalError {
         EvalError { message }
     }
-
-    pub fn from_str(message: &str) -> EvalError {
-        let message = String::from(message);
-        EvalError { message }
-    }
 }
 
 impl fmt::Display for EvalError {

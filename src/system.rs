@@ -7,19 +7,17 @@ use std::{
     fs::{read_dir, DirEntry},
     path::PathBuf,
 };
-
-use crate::error::EvalError;
+use anyhow::anyhow;
 
 /// Changes the current directory.
 pub fn change_directory(path: &PathBuf) -> anyhow::Result<()> {
     match std::env::set_current_dir(path) {
         Ok(_) => Ok(()),
         Err(e) => {
-            let message = match e.kind() {
-                ErrorKind::NotFound => format!("cd: {}: No such file or directory", path.display()),
-                _ => format!("{}", e),
-            };
-            Err(EvalError::new(message))?
+            if let ErrorKind::NotFound = e.kind() {
+                Err(anyhow!("{}: No such file or directory", path.display()))?
+            }
+            Err(e)?
         }
     }
 }
@@ -29,7 +27,6 @@ pub fn get_path() -> Vec<PathBuf> {
     match var_os("PATH") {
         Some(path) => split_paths(&path).collect(),
         None => {
-            eprintln!("No PATH environment variable found!");
             Vec::new()
         }
     }
@@ -55,21 +52,15 @@ pub fn search_for_executable_file(paths: &[PathBuf], file_name: &str) -> Option<
                                             return Some(dir_entry);
                                         }
                                     }
-                                    Err(e) => {
-                                        eprintln!("error getting file type: {}", e);
-                                    }
+                                    Err(_) => {}
                                 }
                             }
                         }
-                        Err(e) => {
-                            eprintln!("error with dir entry: {}", e);
-                        }
+                        Err(_) => {}
                     }
                 }
             }
-            Err(e) => {
-                eprintln!("error reading dir {}: {}", path.display(), e);
-            }
+            Err(_) => {}
         }
     }
     None

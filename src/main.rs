@@ -59,39 +59,22 @@ fn eval(paths: &[PathBuf], command_text: &str) -> anyhow::Result<()> {
 fn eval_command(paths: &[PathBuf], command: Command) -> anyhow::Result<()> {
     match command.simple_command {
         SimpleCommand::BuiltIn(built_in) => {
-            let mut stdio: Box<dyn Write> = match command.redirection {
-                None => Box::new(io::stdout()),
-                Some(Redirection::Output {
-                    file_descriptor: 1,
-                    target,
-                }) => Box::new(File::create(target)?),
-                Some(Redirection::Output {
-                    file_descriptor, ..
-                }) => {
-                    let message = format!("unrecognized file descriptor `{file_descriptor}`");
-                    Err(EvalError::new(message))?
+            let (mut stdout, mut stderr) = match command.redirection {
+                Some(redirection) => get_redirection_write(redirection)?,
+                None => {
+                    let stdout: Box<dyn Write> = Box::new(io::stdout());
+                    let stderr: Box<dyn Write> = Box::new(io::stderr());
+                    (stdout, stderr)
                 }
             };
-            eval_built_in(paths, &mut stdio, built_in)
+            eval_built_in(paths, &mut stdout, &mut stderr, built_in)
         }
         SimpleCommand::External(args) => {
-            let stdio = match command.redirection {
-                None => Stdio::inherit(),
-                Some(Redirection::Output {
-                    file_descriptor: 1,
-                    target,
-                }) => {
-                    let file = File::create(target)?;
-                    Stdio::from(file)
-                }
-                Some(Redirection::Output {
-                    file_descriptor, ..
-                }) => {
-                    let message = format!("unrecognized file descriptor `{file_descriptor}`");
-                    Err(EvalError::new(message))?
-                }
+            let (stdout, stderr) = match command.redirection {
+                Some(redirection) => get_redirection_stdio(redirection)?,
+                None => (Stdio::inherit(), Stdio::inherit()),
             };
-            eval_external(args, stdio)
+            eval_external(args, stdout, stderr)
         }
     }
 }
@@ -99,65 +82,66 @@ fn eval_command(paths: &[PathBuf], command: Command) -> anyhow::Result<()> {
 /// Evaluates a built in command.
 fn eval_built_in(
     paths: &[PathBuf],
-    stdio: &mut Box<dyn Write>,
+    stdout: &mut Box<dyn Write>,
+    stderr: &mut Box<dyn Write>,
     built_in: BuiltIn,
 ) -> anyhow::Result<()> {
     match built_in {
         BuiltIn::Echo(args) => {
             if !args.is_empty() {
-                write!(stdio, "{}", args[0])?;
+                write!(stdout, "{}", args[0])?;
                 for arg in args.iter().skip(1) {
-                    write!(stdio, " {}", arg)?;
+                    write!(stdout, " {}", arg)?;
                 }
             }
-            writeln!(stdio)?;
-            Ok(())
+            writeln!(stdout)?;
         }
         BuiltIn::Cd(path) if path == "~" => match std::env::home_dir() {
-            Some(home) => change_directory(&home),
-            None => Err(EvalError::from_str("cd: Home directory is unknown"))?,
+            Some(home) => change_directory(&home)?,
+            None => writeln!(stderr, "cd: Home directory is unknown")?,
         },
-        BuiltIn::Cd(path) => change_directory(&PathBuf::from(path)),
+        BuiltIn::Cd(path) => {
+            if let Err(e) = change_directory(&PathBuf::from(path)) {
+                writeln!(stderr, "cd: {e}")?;
+            }
+        }
         BuiltIn::Exit(code) => {
             std::process::exit(code);
         }
         BuiltIn::Pwd => match std::env::current_dir() {
             Ok(current_dir) => {
-                writeln!(stdio, "{}", current_dir.display())?;
-                Ok(())
+                writeln!(stdout, "{}", current_dir.display())?;
             }
             Err(e) => {
-                let message = format!("{}", e);
-                Err(EvalError::new(message))?
+                writeln!(stderr, "{}", e)?;
             }
         },
         BuiltIn::Type(command) => match command.as_ref() {
             "cd" | "echo" | "exit" | "pwd" | "type" => {
-                writeln!(stdio, "{} is a shell builtin", command)?;
-                Ok(())
+                writeln!(stdout, "{} is a shell builtin", command)?;
             }
             _ => match search_for_executable_file(paths, &command) {
                 Some(dir_entry) => {
-                    writeln!(stdio, "{} is {}", command, dir_entry.path().display())?;
-                    Ok(())
+                    writeln!(stdout, "{} is {}", command, dir_entry.path().display())?;
                 }
                 None => {
-                    let message = format!("{}: not found", command);
-                    Err(EvalError::new(message))?
+                    writeln!(stderr, "{}: not found", command)?;
                 }
             },
         },
     }
+    Ok(())
 }
 
 /// Evaluates an external command, e.g. `cd`.
-fn eval_external(args: Vec<String>, stdio: Stdio) -> anyhow::Result<()> {
+fn eval_external(args: Vec<String>, stdio: Stdio, stderr: Stdio) -> anyhow::Result<()> {
     assert!(!args.is_empty());
     let command = &args[0];
     let args = args.iter().skip(1);
     let status = std::process::Command::new(command)
         .args(args)
         .stdout(stdio)
+        .stderr(stderr)
         .status();
     match status {
         Ok(_) => Ok(()),
@@ -166,6 +150,66 @@ fn eval_external(args: Vec<String>, stdio: Stdio) -> anyhow::Result<()> {
                 ErrorKind::NotFound => format!("{}: command not found", command),
                 _ => format!("{}", e),
             };
+            Err(EvalError::new(message))?
+        }
+    }
+}
+
+fn get_redirection_write(
+    redirection: Redirection,
+) -> anyhow::Result<(Box<dyn Write>, Box<dyn Write>)> {
+    match redirection {
+        Redirection::Output {
+            file_descriptor: 1,
+            target,
+        } => {
+            let file = File::create(target)?;
+            let stdout: Box<dyn Write> = Box::new(file);
+            let stderr: Box<dyn Write> = Box::new(io::stderr());
+            Ok((stdout, stderr))
+        }
+        Redirection::Output {
+            file_descriptor: 2,
+            target,
+        } => {
+            let file = File::create(target)?;
+            let stdout: Box<dyn Write> = Box::new(io::stdout());
+            let stderr: Box<dyn Write> = Box::new(file);
+            Ok((stdout, stderr))
+        }
+        Redirection::Output {
+            file_descriptor, ..
+        } => {
+            let message = format!("unrecognized file descriptor `{file_descriptor}`");
+            Err(EvalError::new(message))?
+        }
+    }
+}
+
+fn get_redirection_stdio(redirection: Redirection) -> anyhow::Result<(Stdio, Stdio)> {
+    match redirection {
+        Redirection::Output {
+            file_descriptor: 1,
+            target,
+        } => {
+            let file = File::create(target)?;
+            let stdio = Stdio::from(file);
+            let stderr = Stdio::inherit();
+            Ok((stdio, stderr))
+        }
+        Redirection::Output {
+            file_descriptor: 2,
+            target,
+        } => {
+            let file = File::create(target)?;
+            let stdio = Stdio::inherit();
+            let stderr = Stdio::from(file);
+            Ok((stdio, stderr))
+        }
+        Redirection::Output {
+            file_descriptor, ..
+        } => {
+            let message = format!("unrecognized file descriptor `{file_descriptor}`");
             Err(EvalError::new(message))?
         }
     }
