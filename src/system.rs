@@ -2,12 +2,12 @@
 use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 
+use anyhow::anyhow;
 use std::{
     env::{split_paths, var_os},
     fs::{read_dir, DirEntry},
     path::PathBuf,
 };
-use anyhow::anyhow;
 
 /// Changes the current directory.
 pub fn change_directory(path: &PathBuf) -> anyhow::Result<()> {
@@ -26,9 +26,7 @@ pub fn change_directory(path: &PathBuf) -> anyhow::Result<()> {
 pub fn get_path() -> Vec<PathBuf> {
     match var_os("PATH") {
         Some(path) => split_paths(&path).collect(),
-        None => {
-            Vec::new()
-        }
+        None => Vec::new(),
     }
 }
 

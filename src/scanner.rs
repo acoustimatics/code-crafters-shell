@@ -16,8 +16,14 @@ pub enum TokenTag {
     /// Output redirection operator `>`.
     RedirectOut,
 
+    /// Output append redirection operator `>>`.
+    RedirectOutAppend,
+
     /// Output redirection opterator with a file descriptor, e.g. `1>`.
     RedirectOutWithFileDescriptor(i32),
+
+    /// Output redirection append opterator with a file descriptor, e.g. `1>>`.
+    RedirectOutAppendWithFileDescriptor(i32),
 
     /// A word which is a string of non-whitespace characters that doesn't
     /// start with a digit.
@@ -66,6 +72,9 @@ pub struct Scanner<'a> {
 
     /// Current value from command text being considered.
     current: Option<char>,
+
+    /// Next char after current in the command text.
+    next: Option<char>,
 }
 
 impl<'a> Scanner<'a> {
@@ -74,7 +83,9 @@ impl<'a> Scanner<'a> {
         let mut scanner = Scanner {
             chars: command_text.chars(),
             current: None,
+            next: None,
         };
+        scanner.advance();
         scanner.advance();
         scanner
     }
@@ -85,6 +96,12 @@ impl<'a> Scanner<'a> {
 
         let token = match self.current {
             None => Token::new(TokenTag::EndOfCommand, String::from("")),
+            Some('>') if matches!(self.next, Some('>')) => {
+                self.advance();
+                self.advance();
+                let lexeme = String::from(">>");
+                Token::new(TokenTag::RedirectOutAppend, lexeme)
+            }
             Some('>') => {
                 self.advance();
                 let lexeme = String::from(">");
@@ -210,6 +227,12 @@ impl<'a> Scanner<'a> {
         let i = parse_i32(&lexeme)?;
 
         let tag = match self.current {
+            Some('>') if matches!(self.next, Some('>')) => {
+                lexeme.push_str(">>");
+                self.advance();
+                self.advance();
+                TokenTag::RedirectOutAppendWithFileDescriptor(i)
+            }
             Some('>') => {
                 lexeme.push('>');
                 self.advance();
@@ -233,7 +256,8 @@ impl<'a> Scanner<'a> {
 
     /// Advances `current` to the next character in command text.
     fn advance(&mut self) {
-        self.current = self.chars.next();
+        self.current = self.next;
+        self.next = self.chars.next();
     }
 }
 

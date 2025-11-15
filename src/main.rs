@@ -11,6 +11,7 @@ use crate::system::change_directory;
 use crate::system::get_path;
 use crate::system::search_for_executable_file;
 use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::ErrorKind;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -158,59 +159,51 @@ fn eval_external(args: Vec<String>, stdio: Stdio, stderr: Stdio) -> anyhow::Resu
 fn get_redirection_write(
     redirection: Redirection,
 ) -> anyhow::Result<(Box<dyn Write>, Box<dyn Write>)> {
-    match redirection {
-        Redirection::Output {
-            file_descriptor: 1,
-            target,
-        } => {
-            let file = File::create(target)?;
+    let file = create_redirection_file(redirection.target)?;
+
+    match redirection.file_descriptor {
+        FileDescriptor::StdOut => {
             let stdout: Box<dyn Write> = Box::new(file);
             let stderr: Box<dyn Write> = Box::new(io::stderr());
             Ok((stdout, stderr))
         }
-        Redirection::Output {
-            file_descriptor: 2,
-            target,
-        } => {
-            let file = File::create(target)?;
+        FileDescriptor::StdErr => {
             let stdout: Box<dyn Write> = Box::new(io::stdout());
             let stderr: Box<dyn Write> = Box::new(file);
             Ok((stdout, stderr))
-        }
-        Redirection::Output {
-            file_descriptor, ..
-        } => {
-            let message = format!("unrecognized file descriptor `{file_descriptor}`");
-            Err(EvalError::new(message))?
         }
     }
 }
 
 fn get_redirection_stdio(redirection: Redirection) -> anyhow::Result<(Stdio, Stdio)> {
-    match redirection {
-        Redirection::Output {
-            file_descriptor: 1,
-            target,
-        } => {
-            let file = File::create(target)?;
+    let file = create_redirection_file(redirection.target)?;
+
+    match redirection.file_descriptor {
+        FileDescriptor::StdOut => {
             let stdio = Stdio::from(file);
             let stderr = Stdio::inherit();
             Ok((stdio, stderr))
         }
-        Redirection::Output {
-            file_descriptor: 2,
-            target,
-        } => {
-            let file = File::create(target)?;
+        FileDescriptor::StdErr => {
             let stdio = Stdio::inherit();
             let stderr = Stdio::from(file);
             Ok((stdio, stderr))
         }
-        Redirection::Output {
-            file_descriptor, ..
-        } => {
-            let message = format!("unrecognized file descriptor `{file_descriptor}`");
-            Err(EvalError::new(message))?
-        }
     }
+}
+
+/// Creates a file for a redirection.
+fn create_redirection_file(redirection_file: RedirectionFile) -> io::Result<File> {
+    let mut open_options = OpenOptions::new();
+
+    if redirection_file.is_append {
+        open_options.append(true);
+    } else {
+        open_options.truncate(true);
+    }
+
+    open_options
+        .write(true)
+        .create(true)
+        .open(redirection_file.name)
 }

@@ -46,11 +46,26 @@ pub enum BuiltIn {
     Type(String),
 }
 
-/// A redirection operator.
-pub enum Redirection {
-    /// Redirects output from a file descriptor to a destination.
-    Output {
-        file_descriptor: i32,
-        target: String,
-    },
+/// Output redirection operator.
+pub struct Redirection {
+    /// The source file of the redirection.
+    pub file_descriptor: FileDescriptor,
+
+    /// The target file of the redirection.
+    pub target: RedirectionFile,
+}
+
+/// Enumerates redirection file descriptors.
+pub enum FileDescriptor {
+    StdOut,
+    StdErr,
+}
+
+/// Represents how to create a file for output redirection.
+pub struct RedirectionFile {
+    /// A file name.
+    pub name: String,
+
+    /// Whether redirection appends or completely overwrites.
+    pub is_append: bool,
 }

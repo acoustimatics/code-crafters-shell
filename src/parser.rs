@@ -3,7 +3,7 @@
 use anyhow::anyhow;
 
 use crate::{
-    ast::{BuiltIn, Command, Redirection, SimpleCommand},
+    ast::{BuiltIn, Command, FileDescriptor, Redirection, RedirectionFile, SimpleCommand},
     scanner::*,
 };
 
@@ -89,17 +89,29 @@ fn command(state: &mut ParserState) -> anyhow::Result<Command> {
 }
 
 fn redirection(state: &mut ParserState) -> anyhow::Result<Option<Redirection>> {
-    let file_descriptor = match state.current.tag {
-        TokenTag::RedirectOut => Some(1),
-        TokenTag::RedirectOutWithFileDescriptor(file_descriptor) => Some(file_descriptor),
+    use FileDescriptor::*;
+    use TokenTag::*;
+
+    let redirection = match state.current.tag {
+        RedirectOut => Some((StdOut, false)),
+        RedirectOutAppend => Some((StdOut, true)),
+        RedirectOutWithFileDescriptor(1) => Some((StdOut, false)),
+        RedirectOutWithFileDescriptor(2) => Some((StdErr, false)),
+        RedirectOutWithFileDescriptor(x) => Err(anyhow!("unrecognized filed descriptor {x}"))?,
+        RedirectOutAppendWithFileDescriptor(1) => Some((StdOut, true)),
+        RedirectOutAppendWithFileDescriptor(2) => Some((StdErr, true)),
+        RedirectOutAppendWithFileDescriptor(x) => {
+            Err(anyhow!("unrecognized filed descriptor {x}"))?
+        }
         _ => None,
     };
 
-    let redirection = match file_descriptor {
-        Some(file_descriptor) => {
+    let redirection = match redirection {
+        Some((file_descriptor, is_append)) => {
             state.advance()?;
-            let target = state.expect_lexeme(TokenTag::Word)?;
-            let redirection = Redirection::Output {
+            let name = state.expect_lexeme(TokenTag::Word)?;
+            let target = RedirectionFile { name, is_append };
+            let redirection = Redirection {
                 file_descriptor,
                 target,
             };
