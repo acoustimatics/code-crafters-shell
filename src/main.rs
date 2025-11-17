@@ -4,6 +4,12 @@ mod parser;
 mod scanner;
 mod system;
 
+use rustyline::Helper;
+use rustyline::{
+    Completer, CompletionType, Config, Context, Editor, Highlighter, Hinter, Validator,
+};
+use trie_rs::{Trie, TrieBuilder};
+
 use crate::ast::*;
 use crate::error::EvalError;
 use crate::parser::*;
@@ -17,35 +23,35 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::Stdio;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let paths = get_path();
-    repl(&paths);
-}
 
-/// Read, eval, print loop.
-fn repl(paths: &[PathBuf]) -> ! {
+    let lookup = {
+        let mut lookup_builder = TrieBuilder::new();
+        lookup_builder.push("echo");
+        lookup_builder.push("exit");
+        lookup_builder.build()
+    };
+
+    let completer = ShellCompleter::new(lookup);
+
+    let helper = ShellHelper::new(completer);
+
+    let mut editor = {
+        let config = Config::builder()
+            .completion_type(CompletionType::Circular)
+            .build();
+        let mut editor = Editor::with_config(config)?;
+        editor.set_helper(Some(helper));
+        editor
+    };
+
     loop {
-        match read_eval(paths) {
-            Ok(_) => {}
-            Err(e) => eprintln!("{}", e),
+        let command_text = editor.readline("$ ")?;
+        if let Err(e) = eval(&paths, &command_text) {
+            eprintln!("{}", e);
         }
     }
-}
-
-/// Reads and evaluates a command.
-fn read_eval(paths: &[PathBuf]) -> anyhow::Result<()> {
-    print!("$ ");
-    let command_text = read()?;
-    eval(paths, &command_text)
-}
-
-/// Reads a command.
-fn read() -> anyhow::Result<String> {
-    io::stdout().flush()?;
-
-    let mut input = String::new();
-    _ = io::stdin().read_line(&mut input)?;
-    Ok(input)
 }
 
 /// Parses and evaluates a command.
@@ -206,4 +212,40 @@ fn create_redirection_file(redirection_file: RedirectionFile) -> io::Result<File
         .write(true)
         .create(true)
         .open(redirection_file.name)
+}
+
+#[derive(Helper, Completer, Hinter, Highlighter, Validator)]
+struct ShellHelper {
+    #[rustyline(Completer)]
+    completer: ShellCompleter,
+}
+
+impl ShellHelper {
+    fn new(completer: ShellCompleter) -> Self {
+        Self { completer }
+    }
+}
+
+struct ShellCompleter {
+    lookup: Trie<u8>,
+}
+
+impl ShellCompleter {
+    fn new(lookup: Trie<u8>) -> Self {
+        Self { lookup }
+    }
+}
+
+impl rustyline::completion::Completer for ShellCompleter {
+    type Candidate = String;
+
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        _ctx: &Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<String>)> {
+        let completions: Vec<String> = self.lookup.postfix_search(line).collect();
+        Ok((pos, completions))
+    }
 }
