@@ -245,7 +245,10 @@ impl rustyline::completion::Completer for ShellCompleter {
         pos: usize,
         _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<String>)> {
-        let completions: Vec<String> = self.lookup.postfix_search(line).collect();
+        let mut completions: Vec<String> = self.lookup.postfix_search(line).collect();
+        for completion in completions.iter_mut() {
+            completion.push(' ');
+        }
         Ok((pos, completions))
     }
 }
