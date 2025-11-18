@@ -8,12 +8,11 @@ use rustyline::Helper;
 use rustyline::{
     Completer, CompletionType, Config, Context, Editor, Highlighter, Hinter, Validator,
 };
-use trie_rs::{Trie, TrieBuilder};
 
 use crate::ast::*;
 use crate::error::EvalError;
 use crate::parser::*;
-use crate::system::change_directory;
+use crate::system::{change_directory, trie_builder_with_path_executables};
 use crate::system::get_path;
 use crate::system::search_for_executable_file;
 use std::fs::File;
@@ -26,14 +25,7 @@ use std::process::Stdio;
 fn main() -> anyhow::Result<()> {
     let paths = get_path();
 
-    let lookup = {
-        let mut lookup_builder = TrieBuilder::new();
-        lookup_builder.push("echo");
-        lookup_builder.push("exit");
-        lookup_builder.build()
-    };
-
-    let completer = ShellCompleter::new(lookup);
+    let completer = ShellCompleter::new(&paths);
 
     let helper = ShellHelper::new(completer);
 
@@ -215,28 +207,28 @@ fn create_redirection_file(redirection_file: RedirectionFile) -> io::Result<File
 }
 
 #[derive(Helper, Completer, Hinter, Highlighter, Validator)]
-struct ShellHelper {
+struct ShellHelper<'a> {
     #[rustyline(Completer)]
-    completer: ShellCompleter,
+    completer: ShellCompleter<'a>,
 }
 
-impl ShellHelper {
-    fn new(completer: ShellCompleter) -> Self {
+impl<'a> ShellHelper<'a> {
+    fn new(completer: ShellCompleter<'a>) -> Self {
         Self { completer }
     }
 }
 
-struct ShellCompleter {
-    lookup: Trie<u8>,
+struct ShellCompleter<'a> {
+    paths: &'a [PathBuf],
 }
 
-impl ShellCompleter {
-    fn new(lookup: Trie<u8>) -> Self {
-        Self { lookup }
+impl<'a> ShellCompleter<'a> {
+    fn new(paths: &'a [PathBuf]) -> Self {
+        Self { paths }
     }
 }
 
-impl rustyline::completion::Completer for ShellCompleter {
+impl<'a> rustyline::completion::Completer for ShellCompleter<'a> {
     type Candidate = String;
 
     fn complete(
@@ -245,10 +237,25 @@ impl rustyline::completion::Completer for ShellCompleter {
         pos: usize,
         _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<String>)> {
-        let mut completions: Vec<String> = self.lookup.postfix_search(line).collect();
+        let trie = {
+            let mut trie_builder = trie_builder_with_path_executables(self.paths);
+            
+            // Add built-in commands to trie builder.
+            trie_builder.push("cd");
+            trie_builder.push("echo");
+            trie_builder.push("exit");
+            trie_builder.push("pwd");
+            trie_builder.push("type");
+            
+            trie_builder.build()
+        };
+        
+        let mut completions: Vec<String> = trie.postfix_search(line).collect();
+
         for completion in completions.iter_mut() {
             completion.push(' ');
         }
+
         Ok((pos, completions))
     }
 }

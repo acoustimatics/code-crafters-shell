@@ -3,6 +3,7 @@ use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 
 use anyhow::anyhow;
+use trie_rs::TrieBuilder;
 use std::{
     env::{split_paths, var_os},
     fs::{read_dir, DirEntry},
@@ -62,4 +63,39 @@ pub fn search_for_executable_file(paths: &[PathBuf], file_name: &str) -> Option<
         }
     }
     None
+}
+
+pub fn trie_builder_with_path_executables(paths: &[PathBuf]) -> TrieBuilder<u8> {
+    let mut builder = TrieBuilder::new();
+
+    for path in paths.iter() {
+        if !path.exists() {
+            continue;
+        }
+
+        match read_dir(path) {
+            Ok(read_dir_iter) => {
+                for dir_entry in read_dir_iter {
+                    match dir_entry {
+                        Ok(dir_entry) => {
+                            match dir_entry.metadata() {
+                                Ok(metadata) => {
+                                    let mode = metadata.permissions().mode();
+                                    if mode & 0o111 != 0 {
+                                        let file_name = dir_entry.file_name();
+                                        builder.push(file_name.as_encoded_bytes());
+                                    }
+                                }
+                                Err(_) => {}
+                            }
+                        }
+                        Err(_) => {}
+                    }
+                }
+            }
+            Err(_) => {}
+        }
+    }
+    
+    builder
 }
