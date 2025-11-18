@@ -5,6 +5,7 @@ mod scanner;
 mod system;
 
 use rustyline::Helper;
+use rustyline::completion::Candidate;
 use rustyline::{
     Completer, CompletionType, Config, Context, Editor, Highlighter, Hinter, Validator,
 };
@@ -31,7 +32,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut editor = {
         let config = Config::builder()
-            .completion_type(CompletionType::Circular)
+            .completion_type(CompletionType::List)
             .build();
         let mut editor = Editor::with_config(config)?;
         editor.set_helper(Some(helper));
@@ -229,14 +230,14 @@ impl<'a> ShellCompleter<'a> {
 }
 
 impl<'a> rustyline::completion::Completer for ShellCompleter<'a> {
-    type Candidate = String;
+    type Candidate = ShellCompletionCandidate;
 
     fn complete(
         &self,
         line: &str,
         pos: usize,
         _ctx: &Context<'_>,
-    ) -> rustyline::Result<(usize, Vec<String>)> {
+    ) -> rustyline::Result<(usize, Vec<ShellCompletionCandidate>)> {
         let trie = {
             let mut trie_builder = trie_builder_with_path_executables(self.paths);
             
@@ -250,12 +251,37 @@ impl<'a> rustyline::completion::Completer for ShellCompleter<'a> {
             trie_builder.build()
         };
         
-        let mut completions: Vec<String> = trie.postfix_search(line).collect();
-
-        for completion in completions.iter_mut() {
-            completion.push(' ');
-        }
+        let completions = trie.postfix_search(line).map(|completion: String| ShellCompletionCandidate::new(line, completion) ).collect();
 
         Ok((pos, completions))
     }
 }
+
+struct ShellCompletionCandidate {
+    display: String,
+    replacement: String,
+}
+
+impl ShellCompletionCandidate {
+    fn new(line: &str, completion: String) -> Self {
+        let mut display = String::new();
+        display.push_str(line);
+        display.push_str(&completion);
+        
+        let mut replacement = completion;
+        replacement.push(' ');
+        
+        Self { display, replacement }
+    }
+}
+
+impl Candidate for ShellCompletionCandidate {
+    fn display(&self) -> &str {
+        &self.display
+    }
+
+    fn replacement(&self) -> &str {
+        &self.replacement
+    }
+}
+
