@@ -97,11 +97,11 @@ fn redirection(state: &mut ParserState) -> anyhow::Result<Option<Redirection>> {
         RedirectOutAppend => Some((StdOut, true)),
         RedirectOutWithFileDescriptor(1) => Some((StdOut, false)),
         RedirectOutWithFileDescriptor(2) => Some((StdErr, false)),
-        RedirectOutWithFileDescriptor(x) => Err(anyhow!("unrecognized filed descriptor {x}"))?,
+        RedirectOutWithFileDescriptor(x) => Err(anyhow!("unrecognized file descriptor {x}"))?,
         RedirectOutAppendWithFileDescriptor(1) => Some((StdOut, true)),
         RedirectOutAppendWithFileDescriptor(2) => Some((StdErr, true)),
         RedirectOutAppendWithFileDescriptor(x) => {
-            Err(anyhow!("unrecognized filed descriptor {x}"))?
+            Err(anyhow!("unrecognized file descriptor {x}"))?
         }
         _ => None,
     };
