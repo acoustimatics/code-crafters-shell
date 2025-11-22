@@ -3,12 +3,12 @@ use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 
 use anyhow::anyhow;
-use trie_rs::TrieBuilder;
 use std::{
     env::{split_paths, var_os},
     fs::{read_dir, DirEntry},
     path::PathBuf,
 };
+use trie_rs::TrieBuilder;
 
 /// Changes the current directory.
 pub fn change_directory(path: &PathBuf) -> anyhow::Result<()> {
@@ -77,18 +77,16 @@ pub fn trie_builder_with_path_executables(paths: &[PathBuf]) -> TrieBuilder<u8> 
             Ok(read_dir_iter) => {
                 for dir_entry in read_dir_iter {
                     match dir_entry {
-                        Ok(dir_entry) => {
-                            match dir_entry.metadata() {
-                                Ok(metadata) => {
-                                    let mode = metadata.permissions().mode();
-                                    if mode & 0o111 != 0 {
-                                        let file_name = dir_entry.file_name();
-                                        builder.push(file_name.as_encoded_bytes());
-                                    }
+                        Ok(dir_entry) => match dir_entry.metadata() {
+                            Ok(metadata) => {
+                                let mode = metadata.permissions().mode();
+                                if mode & 0o111 != 0 {
+                                    let file_name = dir_entry.file_name();
+                                    builder.push(file_name.as_encoded_bytes());
                                 }
-                                Err(_) => {}
                             }
-                        }
+                            Err(_) => {}
+                        },
                         Err(_) => {}
                     }
                 }
@@ -96,6 +94,6 @@ pub fn trie_builder_with_path_executables(paths: &[PathBuf]) -> TrieBuilder<u8> 
             Err(_) => {}
         }
     }
-    
+
     builder
 }

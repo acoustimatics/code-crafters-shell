@@ -4,8 +4,8 @@ mod parser;
 mod scanner;
 mod system;
 
-use rustyline::Helper;
 use rustyline::completion::Candidate;
+use rustyline::Helper;
 use rustyline::{
     Completer, CompletionType, Config, Context, Editor, Highlighter, Hinter, Validator,
 };
@@ -13,9 +13,9 @@ use rustyline::{
 use crate::ast::*;
 use crate::error::EvalError;
 use crate::parser::*;
-use crate::system::{change_directory, trie_builder_with_path_executables};
 use crate::system::get_path;
 use crate::system::search_for_executable_file;
+use crate::system::{change_directory, trie_builder_with_path_executables};
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::ErrorKind;
@@ -240,18 +240,21 @@ impl<'a> rustyline::completion::Completer for ShellCompleter<'a> {
     ) -> rustyline::Result<(usize, Vec<ShellCompletionCandidate>)> {
         let trie = {
             let mut trie_builder = trie_builder_with_path_executables(self.paths);
-            
+
             // Add built-in commands to trie builder.
             trie_builder.push("cd");
             trie_builder.push("echo");
             trie_builder.push("exit");
             trie_builder.push("pwd");
             trie_builder.push("type");
-            
+
             trie_builder.build()
         };
-        
-        let completions = trie.postfix_search(line).map(|completion: String| ShellCompletionCandidate::new(line, completion) ).collect();
+
+        let completions = trie
+            .postfix_search(line)
+            .map(|completion: String| ShellCompletionCandidate::new(line, completion))
+            .collect();
 
         Ok((pos, completions))
     }
@@ -267,11 +270,14 @@ impl ShellCompletionCandidate {
         let mut display = String::new();
         display.push_str(line);
         display.push_str(&completion);
-        
+
         let mut replacement = completion;
         replacement.push(' ');
-        
-        Self { display, replacement }
+
+        Self {
+            display,
+            replacement,
+        }
     }
 }
 
@@ -284,4 +290,3 @@ impl Candidate for ShellCompletionCandidate {
         &self.replacement
     }
 }
-
