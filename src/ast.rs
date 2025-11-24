@@ -1,30 +1,9 @@
 //! Abstract syntax tree types for a command.
 
 /// A shell command.
-pub struct Command {
-    /// A simple command.
-    pub simple_command: SimpleCommand,
-
-    /// IO redirection for the simple command.
-    pub redirection: Option<Redirection>,
-}
-
-impl Command {
-    pub fn new(simple_command: SimpleCommand, redirection: Option<Redirection>) -> Command {
-        Command {
-            simple_command,
-            redirection,
-        }
-    }
-}
-
-/// A simple command without redirects.
-pub enum SimpleCommand {
-    /// A built in command.
-    BuiltIn(BuiltIn),
-
-    /// An external command, e.g. `ls -a`.
-    External(Vec<String>),
+pub enum Command {
+    BuiltIn { built_in: BuiltIn, redirection: Redirection },
+    External { args: Vec<String>, redirection: Redirection },
 }
 
 /// A shell command.
@@ -46,26 +25,8 @@ pub enum BuiltIn {
     Type(String),
 }
 
-/// Output redirection operator.
-pub struct Redirection {
-    /// The source file of the redirection.
-    pub file_descriptor: FileDescriptor,
-
-    /// The target file of the redirection.
-    pub target: RedirectionFile,
-}
-
-/// Enumerates redirection file descriptors.
-pub enum FileDescriptor {
-    StdOut,
-    StdErr,
-}
-
-/// Represents how to create a file for output redirection.
-pub struct RedirectionFile {
-    /// A file name.
-    pub name: String,
-
-    /// Whether redirection appends or completely overwrites.
-    pub is_append: bool,
+pub enum Redirection {
+    None,
+    StdOut { filename: String, is_append: bool },
+    StdErr { filename: String, is_append: bool },
 }

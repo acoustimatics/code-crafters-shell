@@ -3,7 +3,7 @@
 use anyhow::anyhow;
 
 use crate::{
-    ast::{BuiltIn, Command, FileDescriptor, Redirection, RedirectionFile, SimpleCommand},
+    ast::{BuiltIn, Command, Redirection },
     scanner::*,
 };
 
@@ -82,56 +82,51 @@ pub fn parse(command_text: &str) -> anyhow::Result<Option<Command>> {
 }
 
 fn command(state: &mut ParserState) -> anyhow::Result<Command> {
-    let simple_command = simple_command(state)?;
-    let redirection = redirection(state)?;
+    assert!(state.current.tag == TokenTag::Word);
+
+    let command = if let Some(built_in) = built_in(state)? {
+        let redirection = redirection(state)?;
+        Command::BuiltIn{ built_in, redirection }
+    } else {
+        let args = collect_integer_word(state)?;
+        let redirection = redirection(state)?;
+        Command::External { args, redirection }
+    };
+
     state.expect(TokenTag::EndOfCommand)?;
-    Ok(Command::new(simple_command, redirection))
+
+    Ok(command)
 }
 
-fn redirection(state: &mut ParserState) -> anyhow::Result<Option<Redirection>> {
-    use FileDescriptor::*;
+fn redirection(state: &mut ParserState) -> anyhow::Result<Redirection> {
     use TokenTag::*;
+    use Redirection::*;
 
     let redirection = match state.current.tag {
-        RedirectOut => Some((StdOut, false)),
-        RedirectOutAppend => Some((StdOut, true)),
-        RedirectOutWithFileDescriptor(1) => Some((StdOut, false)),
-        RedirectOutWithFileDescriptor(2) => Some((StdErr, false)),
+        RedirectOut | RedirectOutWithFileDescriptor(1) => StdOut { filename: redirection_filename(state)?, is_append: false },
+
+        RedirectOutAppend | RedirectOutAppendWithFileDescriptor(1) => StdOut { filename: redirection_filename(state)?, is_append: true },
+
+        RedirectOutWithFileDescriptor(2) => StdErr { filename: redirection_filename(state)?, is_append: false },
+        RedirectOutAppendWithFileDescriptor(2) => StdErr { filename: redirection_filename(state)?, is_append: true },
+
         RedirectOutWithFileDescriptor(x) => Err(anyhow!("unrecognized file descriptor {x}"))?,
-        RedirectOutAppendWithFileDescriptor(1) => Some((StdOut, true)),
-        RedirectOutAppendWithFileDescriptor(2) => Some((StdErr, true)),
         RedirectOutAppendWithFileDescriptor(x) => {
             Err(anyhow!("unrecognized file descriptor {x}"))?
         }
-        _ => None,
-    };
 
-    let redirection = match redirection {
-        Some((file_descriptor, is_append)) => {
-            state.advance()?;
-            let name = state.expect_lexeme(TokenTag::Word)?;
-            let target = RedirectionFile { name, is_append };
-            let redirection = Redirection {
-                file_descriptor,
-                target,
-            };
-            Some(redirection)
-        }
-        None => None,
+        _ => None,
     };
 
     Ok(redirection)
 }
 
-/// Parses a command.
-fn simple_command(state: &mut ParserState) -> anyhow::Result<SimpleCommand> {
-    assert!(state.current.tag == TokenTag::Word);
-    if let Some(built_in) = built_in(state)? {
-        Ok(SimpleCommand::BuiltIn(built_in))
-    } else {
-        let args = collect_integer_word(state)?;
-        Ok(SimpleCommand::External(args))
-    }
+fn redirection_filename(state: &mut ParserState) -> anyhow::Result<String> {
+    // Advance past the redirection operator.
+    state.advance()?;
+
+    let filename = state.expect_lexeme(TokenTag::Word)?;
+    Ok(filename)
 }
 
 fn built_in(state: &mut ParserState) -> anyhow::Result<Option<BuiltIn>> {

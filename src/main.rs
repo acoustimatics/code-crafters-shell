@@ -57,33 +57,55 @@ fn eval(paths: &[PathBuf], command_text: &str) -> anyhow::Result<()> {
 
 /// Evaluates a command.
 fn eval_command(paths: &[PathBuf], command: Command) -> anyhow::Result<()> {
-    match command.simple_command {
-        SimpleCommand::BuiltIn(built_in) => {
-            let (mut stdout, mut stderr) = match command.redirection {
-                Some(redirection) => get_redirection_write(redirection)?,
-                None => {
-                    let stdout: Box<dyn Write> = Box::new(io::stdout());
-                    let stderr: Box<dyn Write> = Box::new(io::stderr());
-                    (stdout, stderr)
-                }
-            };
-            eval_built_in(paths, &mut stdout, &mut stderr, built_in)
+    use Command::*;
+    use Redirection::*;
+
+    match command {
+        BuiltIn { built_in, redirection: StdOut { filename, is_append } } => {
+            let mut stdout = open_file(filename, is_append)?;
+            let mut stderr = io::stderr();
+            eval_built_in(paths, &mut stdout, &mut stderr, built_in)?;
         }
-        SimpleCommand::External(args) => {
-            let (stdout, stderr) = match command.redirection {
-                Some(redirection) => get_redirection_stdio(redirection)?,
-                None => (Stdio::inherit(), Stdio::inherit()),
-            };
-            eval_external(args, stdout, stderr)
+
+        BuiltIn { built_in, redirection: StdErr { filename, is_append } } => {
+            let mut stdout = io::stdout();
+            let mut stderr = open_file(filename, is_append)?;
+            eval_built_in(paths, &mut stdout, &mut stderr, built_in)?;
+        }
+
+        BuiltIn { built_in, redirection: None } => {
+            let mut stdout = io::stdout();
+            let mut stderr = io::stderr();
+            eval_built_in(paths, &mut stdout, &mut stderr, built_in)?;
+        }
+        
+        External { args, redirection: StdOut { filename, is_append } } => {
+            let stdio = Stdio::from(open_file(filename, is_append)?);
+            let stderr = Stdio::inherit();
+            eval_external(args, stdio, stderr)?;
+        }
+        
+        External { args, redirection: StdErr { filename, is_append } } => {
+            let stdio = Stdio::inherit();
+            let stderr = Stdio::from(open_file(filename, is_append)?);
+            eval_external(args, stdio, stderr)?;
+        }
+        
+        External { args, redirection: None } => {
+            let stdio = Stdio::inherit();
+            let stderr = Stdio::inherit();
+            eval_external(args, stdio, stderr)?;
         }
     }
+    
+    Ok(())
 }
 
 /// Evaluates a built in command.
-fn eval_built_in(
+fn eval_built_in<TOut: Write, TErr: Write>(
     paths: &[PathBuf],
-    stdout: &mut Box<dyn Write>,
-    stderr: &mut Box<dyn Write>,
+    stdout: &mut TOut,
+    stderr: &mut TErr,
     built_in: BuiltIn,
 ) -> anyhow::Result<()> {
     match built_in {
@@ -155,47 +177,11 @@ fn eval_external(args: Vec<String>, stdio: Stdio, stderr: Stdio) -> anyhow::Resu
     }
 }
 
-fn get_redirection_write(
-    redirection: Redirection,
-) -> anyhow::Result<(Box<dyn Write>, Box<dyn Write>)> {
-    let file = create_redirection_file(redirection.target)?;
-
-    match redirection.file_descriptor {
-        FileDescriptor::StdOut => {
-            let stdout: Box<dyn Write> = Box::new(file);
-            let stderr: Box<dyn Write> = Box::new(io::stderr());
-            Ok((stdout, stderr))
-        }
-        FileDescriptor::StdErr => {
-            let stdout: Box<dyn Write> = Box::new(io::stdout());
-            let stderr: Box<dyn Write> = Box::new(file);
-            Ok((stdout, stderr))
-        }
-    }
-}
-
-fn get_redirection_stdio(redirection: Redirection) -> anyhow::Result<(Stdio, Stdio)> {
-    let file = create_redirection_file(redirection.target)?;
-
-    match redirection.file_descriptor {
-        FileDescriptor::StdOut => {
-            let stdio = Stdio::from(file);
-            let stderr = Stdio::inherit();
-            Ok((stdio, stderr))
-        }
-        FileDescriptor::StdErr => {
-            let stdio = Stdio::inherit();
-            let stderr = Stdio::from(file);
-            Ok((stdio, stderr))
-        }
-    }
-}
-
-/// Creates a file for a redirection.
-fn create_redirection_file(redirection_file: RedirectionFile) -> io::Result<File> {
+/// Creates a file.
+fn open_file(filename: String, is_append: bool) -> io::Result<File> {
     let mut open_options = OpenOptions::new();
 
-    if redirection_file.is_append {
+    if is_append {
         open_options.append(true);
     } else {
         open_options.truncate(true);
@@ -204,7 +190,7 @@ fn create_redirection_file(redirection_file: RedirectionFile) -> io::Result<File
     open_options
         .write(true)
         .create(true)
-        .open(redirection_file.name)
+        .open(filename)
 }
 
 #[derive(Helper, Completer, Hinter, Highlighter, Validator)]
