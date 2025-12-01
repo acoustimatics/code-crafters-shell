@@ -1,8 +1,6 @@
 ```
-Command       = SimpleCommand Redirection?
-
-SimpleCommand = BuiltIn
-              | External
+Command       = BuiltIn Redirection?
+              | External Redirection?
 
 BuiltIn       = "cd" Word
               | "echo" (Integer | Word)*

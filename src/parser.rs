@@ -3,7 +3,7 @@
 use anyhow::anyhow;
 
 use crate::{
-    ast::{BuiltIn, Command, Redirection },
+    ast::{BuiltIn, Command, Pipeline, Redirection},
     scanner::*,
 };
 
@@ -35,6 +35,14 @@ impl<'a> ParserState<'a> {
     fn advance_keep_current(&mut self) -> anyhow::Result<Token> {
         let kept = std::mem::replace(&mut self.current, self.scanner.next_token()?);
         Ok(kept)
+    }
+
+    fn matches(&mut self, expected_tag: TokenTag) -> anyhow::Result<bool> {
+        let is_match = self.current.tag == expected_tag;
+        if is_match {
+            self.advance()?;
+        }
+        Ok(is_match)
     }
 
     /// Advances to the next token if the given tag matches the current token's
@@ -69,15 +77,25 @@ impl<'a> ParserState<'a> {
 }
 
 /// Parses a given command text.
-pub fn parse(command_text: &str) -> anyhow::Result<Option<Command>> {
+pub fn parse(command_text: &str) -> anyhow::Result<Option<Pipeline>> {
     let mut state = ParserState::new(command_text)?;
     match state.current.tag {
         TokenTag::Word => {
-            let command = command(&mut state)?;
-            Ok(Some(command))
+            let pipeline = pipeline(&mut state)?;
+            Ok(Some(pipeline))
         }
         TokenTag::EndOfCommand => Ok(None),
         tag => Err(anyhow!("unexpected token `{:?}`", tag)),
+    }
+}
+
+fn pipeline(state: &mut ParserState) -> anyhow::Result<Pipeline> {
+    let left_command = command(state)?;
+    if state.matches(TokenTag::Pipe)? {
+        let right_command = command(state)?;
+        Ok(Pipeline::Double(left_command, right_command))
+    } else {
+        Ok(Pipeline::Single(left_command))
     }
 }
 
@@ -86,7 +104,10 @@ fn command(state: &mut ParserState) -> anyhow::Result<Command> {
 
     let command = if let Some(built_in) = built_in(state)? {
         let redirection = redirection(state)?;
-        Command::BuiltIn{ built_in, redirection }
+        Command::BuiltIn {
+            built_in,
+            redirection,
+        }
     } else {
         let args = collect_integer_word(state)?;
         let redirection = redirection(state)?;
@@ -99,21 +120,31 @@ fn command(state: &mut ParserState) -> anyhow::Result<Command> {
 }
 
 fn redirection(state: &mut ParserState) -> anyhow::Result<Redirection> {
-    use TokenTag::*;
     use Redirection::*;
+    use TokenTag::*;
 
     let redirection = match state.current.tag {
-        RedirectOut | RedirectOutWithFileDescriptor(1) => StdOut { filename: redirection_filename(state)?, is_append: false },
+        RedirectOut | RedirectOutWithFileDescriptor(1) => StdOut {
+            filename: redirection_filename(state)?,
+            is_append: false,
+        },
 
-        RedirectOutAppend | RedirectOutAppendWithFileDescriptor(1) => StdOut { filename: redirection_filename(state)?, is_append: true },
+        RedirectOutAppend | RedirectOutAppendWithFileDescriptor(1) => StdOut {
+            filename: redirection_filename(state)?,
+            is_append: true,
+        },
 
-        RedirectOutWithFileDescriptor(2) => StdErr { filename: redirection_filename(state)?, is_append: false },
-        RedirectOutAppendWithFileDescriptor(2) => StdErr { filename: redirection_filename(state)?, is_append: true },
+        RedirectOutWithFileDescriptor(2) => StdErr {
+            filename: redirection_filename(state)?,
+            is_append: false,
+        },
+        RedirectOutAppendWithFileDescriptor(2) => StdErr {
+            filename: redirection_filename(state)?,
+            is_append: true,
+        },
 
         RedirectOutWithFileDescriptor(x) => Err(anyhow!("unrecognized file descriptor {x}"))?,
-        RedirectOutAppendWithFileDescriptor(x) => {
-            Err(anyhow!("unrecognized file descriptor {x}"))?
-        }
+        RedirectOutAppendWithFileDescriptor(x) => Err(anyhow!("unrecognized file descriptor {x}"))?,
 
         _ => None,
     };

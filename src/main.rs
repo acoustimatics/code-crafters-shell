@@ -21,7 +21,7 @@ use std::fs::OpenOptions;
 use std::io::ErrorKind;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::Stdio;
+use std::process::{Child, Stdio};
 
 fn main() -> anyhow::Result<()> {
     let paths = get_path();
@@ -49,56 +49,92 @@ fn main() -> anyhow::Result<()> {
 
 /// Parses and evaluates a command.
 fn eval(paths: &[PathBuf], command_text: &str) -> anyhow::Result<()> {
-    let Some(command) = parse(command_text)? else {
+    let Some(Pipeline::Single(command)) = parse(command_text)? else {
         return Ok(());
     };
-    eval_command(paths, command)
+    if let Some(mut child) = eval_command(paths, command)? {
+        let _status = child.wait()?;
+    }
+    Ok(())
 }
 
 /// Evaluates a command.
-fn eval_command(paths: &[PathBuf], command: Command) -> anyhow::Result<()> {
+fn eval_command(paths: &[PathBuf], command: Command) -> anyhow::Result<Option<Child>> {
     use Command::*;
-    use Redirection::*;
 
     match command {
-        BuiltIn { built_in, redirection: StdOut { filename, is_append } } => {
+        BuiltIn {
+            built_in,
+            redirection: Redirection::StdOut {
+                filename,
+                is_append,
+            },
+        } => {
             let mut stdout = open_file(filename, is_append)?;
             let mut stderr = io::stderr();
             eval_built_in(paths, &mut stdout, &mut stderr, built_in)?;
+            Ok(None)
         }
 
-        BuiltIn { built_in, redirection: StdErr { filename, is_append } } => {
+        BuiltIn {
+            built_in,
+            redirection: Redirection::StdErr {
+                filename,
+                is_append,
+            },
+        } => {
             let mut stdout = io::stdout();
             let mut stderr = open_file(filename, is_append)?;
             eval_built_in(paths, &mut stdout, &mut stderr, built_in)?;
+            Ok(None)
         }
 
-        BuiltIn { built_in, redirection: None } => {
+        BuiltIn {
+            built_in,
+            redirection: Redirection::None,
+        } => {
             let mut stdout = io::stdout();
             let mut stderr = io::stderr();
             eval_built_in(paths, &mut stdout, &mut stderr, built_in)?;
+            Ok(None)
         }
-        
-        External { args, redirection: StdOut { filename, is_append } } => {
+
+        External {
+            args,
+            redirection: Redirection::StdOut {
+                filename,
+                is_append,
+            },
+        } => {
             let stdio = Stdio::from(open_file(filename, is_append)?);
             let stderr = Stdio::inherit();
-            eval_external(args, stdio, stderr)?;
+            let child = eval_external(args, stdio, stderr)?;
+            Ok(Some(child))
         }
-        
-        External { args, redirection: StdErr { filename, is_append } } => {
+
+        External {
+            args,
+            redirection: Redirection::StdErr {
+                filename,
+                is_append,
+            },
+        } => {
             let stdio = Stdio::inherit();
             let stderr = Stdio::from(open_file(filename, is_append)?);
-            eval_external(args, stdio, stderr)?;
+            let child = eval_external(args, stdio, stderr)?;
+            Ok(Some(child))
         }
-        
-        External { args, redirection: None } => {
+
+        External {
+            args,
+            redirection: Redirection::None,
+        } => {
             let stdio = Stdio::inherit();
             let stderr = Stdio::inherit();
-            eval_external(args, stdio, stderr)?;
+            let child = eval_external(args, stdio, stderr)?;
+            Ok(Some(child))
         }
     }
-    
-    Ok(())
 }
 
 /// Evaluates a built in command.
@@ -120,7 +156,7 @@ fn eval_built_in<TOut: Write, TErr: Write>(
         }
         BuiltIn::Cd(path) if path == "~" => match std::env::home_dir() {
             Some(home) => change_directory(&home)?,
-            None => writeln!(stderr, "cd: Home directory is unknown")?,
+                None => writeln!(stderr, "cd: Home directory is unknown")?,
         },
         BuiltIn::Cd(path) => {
             if let Err(e) = change_directory(&PathBuf::from(path)) {
@@ -131,42 +167,42 @@ fn eval_built_in<TOut: Write, TErr: Write>(
             std::process::exit(code);
         }
         BuiltIn::Pwd => match std::env::current_dir() {
-            Ok(current_dir) => {
-                writeln!(stdout, "{}", current_dir.display())?;
-            }
-            Err(e) => {
-                writeln!(stderr, "{}", e)?;
-            }
+                Ok(current_dir) => {
+                    writeln!(stdout, "{}", current_dir.display())?;
+                }
+                Err(e) => {
+                    writeln!(stderr, "{}", e)?;
+                }
         },
         BuiltIn::Type(command) => match command.as_ref() {
-            "cd" | "echo" | "exit" | "pwd" | "type" => {
-                writeln!(stdout, "{} is a shell builtin", command)?;
-            }
-            _ => match search_for_executable_file(paths, &command) {
-                Some(dir_entry) => {
-                    writeln!(stdout, "{} is {}", command, dir_entry.path().display())?;
+                "cd" | "echo" | "exit" | "pwd" | "type" => {
+                    writeln!(stdout, "{} is a shell builtin", command)?;
                 }
-                None => {
-                    writeln!(stderr, "{}: not found", command)?;
-                }
-            },
+                _ => match search_for_executable_file(paths, &command) {
+                    Some(dir_entry) => {
+                        writeln!(stdout, "{} is {}", command, dir_entry.path().display())?;
+                    }
+                    None => {
+                        writeln!(stderr, "{}: not found", command)?;
+                    }
+                },
         },
     }
     Ok(())
 }
 
 /// Evaluates an external command, e.g. `cd`.
-fn eval_external(args: Vec<String>, stdio: Stdio, stderr: Stdio) -> anyhow::Result<()> {
+fn eval_external(args: Vec<String>, stdio: Stdio, stderr: Stdio) -> anyhow::Result<Child> {
     assert!(!args.is_empty());
     let command = &args[0];
     let args = args.iter().skip(1);
-    let status = std::process::Command::new(command)
+    let child = std::process::Command::new(command)
         .args(args)
         .stdout(stdio)
         .stderr(stderr)
-        .status();
-    match status {
-        Ok(_) => Ok(()),
+        .spawn();
+    match child {
+        Ok(child) => Ok(child),
         Err(e) => {
             let message = match e.kind() {
                 ErrorKind::NotFound => format!("{}: command not found", command),
@@ -187,10 +223,7 @@ fn open_file(filename: String, is_append: bool) -> io::Result<File> {
         open_options.truncate(true);
     }
 
-    open_options
-        .write(true)
-        .create(true)
-        .open(filename)
+    open_options.write(true).create(true).open(filename)
 }
 
 #[derive(Helper, Completer, Hinter, Highlighter, Validator)]

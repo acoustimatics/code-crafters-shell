@@ -12,6 +12,9 @@ pub enum TokenTag {
 
     /// An integer literal.
     Integer(i32),
+    
+    /// A pipe operator `|`.
+    Pipe,
 
     /// Output redirection operator `>`.
     RedirectOut,
@@ -96,6 +99,11 @@ impl<'a> Scanner<'a> {
 
         let token = match self.current {
             None => Token::new(TokenTag::EndOfCommand, String::from("")),
+            Some('|') => {
+                self.advance();
+                let lexeme = String::from("|");
+                Token::new(TokenTag::Pipe, lexeme)
+            }
             Some('>') if matches!(self.next, Some('>')) => {
                 self.advance();
                 self.advance();
