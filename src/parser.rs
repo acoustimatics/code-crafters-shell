@@ -47,7 +47,7 @@ impl<'a> ParserState<'a> {
 
     /// Advances to the next token if the given tag matches the current token's
     /// tag. Otherwise, an error is returned.
-    fn expect(&mut self, expected_tag: TokenTag) -> anyhow::Result<()> {
+    fn _expect(&mut self, expected_tag: TokenTag) -> anyhow::Result<()> {
         if self.current.tag == expected_tag {
             self.advance()?;
             Ok(())
@@ -113,8 +113,6 @@ fn command(state: &mut ParserState) -> anyhow::Result<Command> {
         let redirection = redirection(state)?;
         Command::External { args, redirection }
     };
-
-    state.expect(TokenTag::EndOfCommand)?;
 
     Ok(command)
 }

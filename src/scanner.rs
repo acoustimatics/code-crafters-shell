@@ -12,7 +12,7 @@ pub enum TokenTag {
 
     /// An integer literal.
     Integer(i32),
-    
+
     /// A pipe operator `|`.
     Pipe,
 

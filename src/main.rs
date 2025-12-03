@@ -11,17 +11,15 @@ use rustyline::{
 };
 
 use crate::ast::*;
-use crate::error::EvalError;
 use crate::parser::*;
-use crate::system::get_path;
 use crate::system::search_for_executable_file;
 use crate::system::{change_directory, trie_builder_with_path_executables};
+use crate::system::{get_path, spawn_command};
 use std::fs::File;
 use std::fs::OpenOptions;
-use std::io::ErrorKind;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::{Child, Stdio};
+use std::process::Stdio;
 
 fn main() -> anyhow::Result<()> {
     let paths = get_path();
@@ -49,26 +47,66 @@ fn main() -> anyhow::Result<()> {
 
 /// Parses and evaluates a command.
 fn eval(paths: &[PathBuf], command_text: &str) -> anyhow::Result<()> {
-    let Some(Pipeline::Single(command)) = parse(command_text)? else {
+    let Some(pipeline) = parse(command_text)? else {
         return Ok(());
     };
-    if let Some(mut child) = eval_command(paths, command)? {
-        let _status = child.wait()?;
+
+    match pipeline {
+        Pipeline::Single(command) => {
+            if let Some(mut command) = eval_command(paths, command, None, None)? {
+                let mut child = spawn_command(&mut command)?;
+                let _status = child.wait()?;
+            }
+        }
+
+        Pipeline::Double(left_command, right_command) => {
+            let left_stdout = Stdio::piped();
+            match eval_command(paths, left_command, None, Some(left_stdout))? {
+                Some(mut left_command) => {
+                    let mut left_child = spawn_command(&mut left_command)?;
+                    let right_stdin = left_child
+                        .stdout
+                        .take()
+                        .map(Stdio::from);
+                    if let Some(mut right_command) =
+                        eval_command(paths, right_command, right_stdin, None)?
+                    {
+                        let mut right_child = spawn_command(&mut right_command)?;
+                        let _left_status = left_child.wait()?;
+                        let _right_status = right_child.wait()?;
+                    }
+                }
+                None => {
+                    if let Some(mut right_command) = eval_command(paths, right_command, None, None)?
+                    {
+                        let mut right_child = spawn_command(&mut right_command)?;
+                        let _right_status = right_child.wait()?;
+                    }
+                }
+            }
+        }
     }
+
     Ok(())
 }
 
 /// Evaluates a command.
-fn eval_command(paths: &[PathBuf], command: Command) -> anyhow::Result<Option<Child>> {
+fn eval_command(
+    paths: &[PathBuf],
+    command: Command,
+    stdin: Option<Stdio>,
+    stdout: Option<Stdio>,
+) -> anyhow::Result<Option<std::process::Command>> {
     use Command::*;
 
     match command {
         BuiltIn {
             built_in,
-            redirection: Redirection::StdOut {
-                filename,
-                is_append,
-            },
+            redirection:
+                Redirection::StdOut {
+                    filename,
+                    is_append,
+                },
         } => {
             let mut stdout = open_file(filename, is_append)?;
             let mut stderr = io::stderr();
@@ -78,10 +116,11 @@ fn eval_command(paths: &[PathBuf], command: Command) -> anyhow::Result<Option<Ch
 
         BuiltIn {
             built_in,
-            redirection: Redirection::StdErr {
-                filename,
-                is_append,
-            },
+            redirection:
+                Redirection::StdErr {
+                    filename,
+                    is_append,
+                },
         } => {
             let mut stdout = io::stdout();
             let mut stderr = open_file(filename, is_append)?;
@@ -101,38 +140,43 @@ fn eval_command(paths: &[PathBuf], command: Command) -> anyhow::Result<Option<Ch
 
         External {
             args,
-            redirection: Redirection::StdOut {
-                filename,
-                is_append,
-            },
+            redirection:
+                Redirection::StdOut {
+                    filename,
+                    is_append,
+                },
         } => {
-            let stdio = Stdio::from(open_file(filename, is_append)?);
+            let stdin = stdin.unwrap_or_else(Stdio::inherit);
+            let stdout = Stdio::from(open_file(filename, is_append)?);
             let stderr = Stdio::inherit();
-            let child = eval_external(args, stdio, stderr)?;
-            Ok(Some(child))
+            let command = eval_external(args, stdin, stdout, stderr)?;
+            Ok(Some(command))
         }
 
         External {
             args,
-            redirection: Redirection::StdErr {
-                filename,
-                is_append,
-            },
+            redirection:
+                Redirection::StdErr {
+                    filename,
+                    is_append,
+                },
         } => {
-            let stdio = Stdio::inherit();
+            let stdin = stdin.unwrap_or_else(Stdio::inherit);
+            let stdout = stdout.unwrap_or_else(Stdio::inherit);
             let stderr = Stdio::from(open_file(filename, is_append)?);
-            let child = eval_external(args, stdio, stderr)?;
-            Ok(Some(child))
+            let command = eval_external(args, stdin, stdout, stderr)?;
+            Ok(Some(command))
         }
 
         External {
             args,
             redirection: Redirection::None,
         } => {
-            let stdio = Stdio::inherit();
+            let stdin = stdin.unwrap_or_else(Stdio::inherit);
+            let stdout = stdout.unwrap_or_else(Stdio::inherit);
             let stderr = Stdio::inherit();
-            let child = eval_external(args, stdio, stderr)?;
-            Ok(Some(child))
+            let command = eval_external(args, stdin, stdout, stderr)?;
+            Ok(Some(command))
         }
     }
 }
@@ -156,7 +200,7 @@ fn eval_built_in<TOut: Write, TErr: Write>(
         }
         BuiltIn::Cd(path) if path == "~" => match std::env::home_dir() {
             Some(home) => change_directory(&home)?,
-                None => writeln!(stderr, "cd: Home directory is unknown")?,
+            None => writeln!(stderr, "cd: Home directory is unknown")?,
         },
         BuiltIn::Cd(path) => {
             if let Err(e) = change_directory(&PathBuf::from(path)) {
@@ -167,50 +211,43 @@ fn eval_built_in<TOut: Write, TErr: Write>(
             std::process::exit(code);
         }
         BuiltIn::Pwd => match std::env::current_dir() {
-                Ok(current_dir) => {
-                    writeln!(stdout, "{}", current_dir.display())?;
-                }
-                Err(e) => {
-                    writeln!(stderr, "{}", e)?;
-                }
+            Ok(current_dir) => {
+                writeln!(stdout, "{}", current_dir.display())?;
+            }
+            Err(e) => {
+                writeln!(stderr, "{}", e)?;
+            }
         },
         BuiltIn::Type(command) => match command.as_ref() {
-                "cd" | "echo" | "exit" | "pwd" | "type" => {
-                    writeln!(stdout, "{} is a shell builtin", command)?;
+            "cd" | "echo" | "exit" | "pwd" | "type" => {
+                writeln!(stdout, "{} is a shell builtin", command)?;
+            }
+            _ => match search_for_executable_file(paths, &command) {
+                Some(dir_entry) => {
+                    writeln!(stdout, "{} is {}", command, dir_entry.path().display())?;
                 }
-                _ => match search_for_executable_file(paths, &command) {
-                    Some(dir_entry) => {
-                        writeln!(stdout, "{} is {}", command, dir_entry.path().display())?;
-                    }
-                    None => {
-                        writeln!(stderr, "{}: not found", command)?;
-                    }
-                },
+                None => {
+                    writeln!(stderr, "{}: not found", command)?;
+                }
+            },
         },
     }
     Ok(())
 }
 
 /// Evaluates an external command, e.g. `cd`.
-fn eval_external(args: Vec<String>, stdio: Stdio, stderr: Stdio) -> anyhow::Result<Child> {
+fn eval_external(
+    args: Vec<String>,
+    stdin: Stdio,
+    stdio: Stdio,
+    stderr: Stdio,
+) -> anyhow::Result<std::process::Command> {
     assert!(!args.is_empty());
-    let command = &args[0];
+    let command_name = &args[0];
     let args = args.iter().skip(1);
-    let child = std::process::Command::new(command)
-        .args(args)
-        .stdout(stdio)
-        .stderr(stderr)
-        .spawn();
-    match child {
-        Ok(child) => Ok(child),
-        Err(e) => {
-            let message = match e.kind() {
-                ErrorKind::NotFound => format!("{}: command not found", command),
-                _ => format!("{}", e),
-            };
-            Err(EvalError::new(message))?
-        }
-    }
+    let mut command = std::process::Command::new(command_name);
+    command.args(args).stdin(stdin).stdout(stdio).stderr(stderr);
+    Ok(command)
 }
 
 /// Creates a file.

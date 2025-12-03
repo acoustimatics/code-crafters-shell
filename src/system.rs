@@ -1,6 +1,7 @@
 //! Contains all code dealing with system access.
-use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
+use std::process::Child;
+use std::{io::ErrorKind, process::Command};
 
 use anyhow::anyhow;
 use std::{
@@ -9,6 +10,8 @@ use std::{
     path::PathBuf,
 };
 use trie_rs::TrieBuilder;
+
+use crate::error::EvalError;
 
 /// Changes the current directory.
 pub fn change_directory(path: &PathBuf) -> anyhow::Result<()> {
@@ -38,31 +41,37 @@ pub fn search_for_executable_file(paths: &[PathBuf], file_name: &str) -> Option<
             continue;
         }
 
-        match read_dir(path) {
-            Ok(read_dir_iter) => {
-                for dir_entry in read_dir_iter {
-                    match dir_entry {
-                        Ok(dir_entry) => {
-                            if dir_entry.file_name() == file_name {
-                                match dir_entry.metadata() {
-                                    Ok(metadata) => {
-                                        let mode = metadata.permissions().mode();
-                                        if mode & 0o111 != 0 {
-                                            return Some(dir_entry);
-                                        }
-                                    }
-                                    Err(_) => {}
-                                }
-                            }
+        if let Ok(read_dir_iter) = read_dir(path) {
+            for dir_entry in read_dir_iter.flatten() {
+                if dir_entry.file_name() == file_name {
+                    if let Ok(metadata) = dir_entry.metadata() {
+                        let mode = metadata.permissions().mode();
+                        if mode & 0o111 != 0 {
+                            return Some(dir_entry);
                         }
-                        Err(_) => {}
                     }
                 }
             }
-            Err(_) => {}
         }
     }
     None
+}
+
+/// Spawn a command and return the child process handle. This handles errors
+/// in a way required by the challenge spec.
+pub fn spawn_command(command: &mut Command) -> anyhow::Result<Child> {
+    match command.spawn() {
+        Ok(child) => Ok(child),
+        Err(e) => {
+            let message = match e.kind() {
+                ErrorKind::NotFound => {
+                    format!("{}: command not found", command.get_program().to_string_lossy())
+                }
+                _ => format!("{}", e),
+            };
+            Err(EvalError::new(message))?
+        }
+    }
 }
 
 pub fn trie_builder_with_path_executables(paths: &[PathBuf]) -> TrieBuilder<u8> {
@@ -73,25 +82,16 @@ pub fn trie_builder_with_path_executables(paths: &[PathBuf]) -> TrieBuilder<u8> 
             continue;
         }
 
-        match read_dir(path) {
-            Ok(read_dir_iter) => {
-                for dir_entry in read_dir_iter {
-                    match dir_entry {
-                        Ok(dir_entry) => match dir_entry.metadata() {
-                            Ok(metadata) => {
-                                let mode = metadata.permissions().mode();
-                                if mode & 0o111 != 0 {
-                                    let file_name = dir_entry.file_name();
-                                    builder.push(file_name.as_encoded_bytes());
-                                }
-                            }
-                            Err(_) => {}
-                        },
-                        Err(_) => {}
+        if let Ok(read_dir_iter) = read_dir(path) {
+            for dir_entry in read_dir_iter.flatten() {
+                if let Ok(metadata) = dir_entry.metadata() {
+                    let mode = metadata.permissions().mode();
+                    if mode & 0o111 != 0 {
+                        let file_name = dir_entry.file_name();
+                        builder.push(file_name.as_encoded_bytes());
                     }
                 }
             }
-            Err(_) => {}
         }
     }
 
