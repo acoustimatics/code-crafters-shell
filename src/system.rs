@@ -65,7 +65,10 @@ pub fn spawn_command(command: &mut Command) -> anyhow::Result<Child> {
         Err(e) => {
             let message = match e.kind() {
                 ErrorKind::NotFound => {
-                    format!("{}: command not found", command.get_program().to_string_lossy())
+                    format!(
+                        "{}: command not found",
+                        command.get_program().to_string_lossy()
+                    )
                 }
                 _ => format!("{}", e),
             };

@@ -2,10 +2,7 @@
 
 use anyhow::anyhow;
 
-use crate::{
-    ast::{BuiltIn, Command, Pipeline, Redirection},
-    scanner::*,
-};
+use crate::{ast::*, scanner::*};
 
 /// Tracks and changes the state of the parser.
 struct ParserState<'a> {
@@ -104,14 +101,16 @@ fn command(state: &mut ParserState) -> anyhow::Result<Command> {
 
     let command = if let Some(built_in) = built_in(state)? {
         let redirection = redirection(state)?;
-        Command::BuiltIn {
+        let built_in_command = BuiltInCommand {
             built_in,
             redirection,
-        }
+        };
+        Command::BuiltIn(built_in_command)
     } else {
         let args = collect_integer_word(state)?;
         let redirection = redirection(state)?;
-        Command::External { args, redirection }
+        let external_command = ExternalCommand { args, redirection };
+        Command::External(external_command)
     };
 
     Ok(command)

@@ -7,14 +7,18 @@ pub enum Pipeline {
 
 /// A shell command.
 pub enum Command {
-    BuiltIn {
-        built_in: BuiltIn,
-        redirection: Redirection,
-    },
-    External {
-        args: Vec<String>,
-        redirection: Redirection,
-    },
+    BuiltIn(BuiltInCommand),
+    External(ExternalCommand),
+}
+
+pub struct BuiltInCommand {
+    pub built_in: BuiltIn,
+    pub redirection: Redirection,
+}
+
+pub struct ExternalCommand {
+    pub args: Vec<String>,
+    pub redirection: Redirection,
 }
 
 /// A shell command.
