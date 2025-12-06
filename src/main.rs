@@ -15,7 +15,7 @@ use crate::parser::*;
 use crate::system::*;
 use std::fs::File;
 use std::fs::OpenOptions;
-use std::io::{self, Cursor, Stdout, Write};
+use std::io::{self, Cursor, Write};
 use std::path::PathBuf;
 use std::process::Stdio;
 
@@ -51,7 +51,8 @@ fn eval(paths: &[PathBuf], command_text: &str) -> anyhow::Result<()> {
 
     match pipeline {
         Pipeline::Single(Command::BuiltIn(built_in_command)) => {
-            eval_built_in_command::<Stdout>(paths, built_in_command, None)?;
+            let out = eval_built_in_command(paths, built_in_command)?;
+            io::stdout().write_all(&out)?;
         }
 
         Pipeline::Single(Command::External(external_command)) => {
@@ -61,20 +62,21 @@ fn eval(paths: &[PathBuf], command_text: &str) -> anyhow::Result<()> {
         }
 
         Pipeline::Double(Command::BuiltIn(left_command), Command::BuiltIn(right_command)) => {
-            eval_built_in_command::<Stdout>(paths, left_command, None)?;
-            eval_built_in_command::<Stdout>(paths, right_command, None)?;
+            let left_out = eval_built_in_command(paths, left_command)?;
+            io::stdout().write_all(&left_out)?;
+
+            let right_out = eval_built_in_command(paths, right_command)?;
+            io::stdout().write_all(&right_out)?;
         }
 
         Pipeline::Double(Command::BuiltIn(left_command), Command::External(right_command)) => {
-            let mut left_buffer = Cursor::new(Vec::new());
-            eval_built_in_command(paths, left_command, Some(&mut left_buffer))?;
+            let left_out = eval_built_in_command(paths, left_command)?;
 
             let mut right_command =
                 eval_external_command(right_command, Some(Stdio::piped()), None)?;
             let mut right_child = spawn_command(&mut right_command)?;
             if let Some(mut right_stdin) = right_child.stdin.take() {
-                let left_buffer = left_buffer.into_inner();
-                right_stdin.write_all(&left_buffer)?;
+                right_stdin.write_all(&left_out)?;
                 right_stdin.flush()?;
             }
             let _right_status = right_child.wait()?;
@@ -84,7 +86,9 @@ fn eval(paths: &[PathBuf], command_text: &str) -> anyhow::Result<()> {
             let mut left_command = eval_external_command(left_command, None, Some(Stdio::null()))?;
             let mut left_child = spawn_command(&mut left_command)?;
             let _left_status = left_child.wait()?;
-            eval_built_in_command::<Stdout>(paths, right_command, None)?;
+
+            let right_out = eval_built_in_command(paths, right_command)?;
+            io::stdout().write_all(&right_out)?;
         }
 
         Pipeline::Double(Command::External(left_command), Command::External(right_command)) => {
@@ -102,11 +106,11 @@ fn eval(paths: &[PathBuf], command_text: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn eval_built_in_command<TOut: Write>(
+/// Evaluates a built in command. Returns stdout contents, if any.
+fn eval_built_in_command(
     paths: &[PathBuf],
     built_in_command: BuiltInCommand,
-    stdout: Option<&mut TOut>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<u8>> {
     match built_in_command.redirection {
         Redirection::StdOut {
             filename,
@@ -115,32 +119,24 @@ fn eval_built_in_command<TOut: Write>(
             let mut stdout = open_file(filename, is_append)?;
             let mut stderr = io::stderr();
             eval_built_in(paths, &mut stdout, &mut stderr, built_in_command.built_in)?;
-            Ok(())
+            Ok(Vec::new())
         }
 
         Redirection::StdErr {
             filename,
             is_append,
         } => {
-            let mut stdout = io::stdout();
+            let mut stdout = Cursor::new(Vec::new());
             let mut stderr = open_file(filename, is_append)?;
             eval_built_in(paths, &mut stdout, &mut stderr, built_in_command.built_in)?;
-            Ok(())
+            Ok(stdout.into_inner())
         }
 
         Redirection::None => {
-            match stdout {
-                None => {
-                    let mut stdout = io::stdout();
-                    let mut stderr = io::stderr();
-                    eval_built_in(paths, &mut stdout, &mut stderr, built_in_command.built_in)?;
-                }
-                Some(stdout) => {
-                    let mut stderr = io::stderr();
-                    eval_built_in(paths, stdout, &mut stderr, built_in_command.built_in)?;
-                }
-            }
-            Ok(())
+            let mut stdout = Cursor::new(Vec::new());
+            let mut stderr = io::stderr();
+            eval_built_in(paths, &mut stdout, &mut stderr, built_in_command.built_in)?;
+            Ok(stdout.into_inner())
         }
     }
 }
