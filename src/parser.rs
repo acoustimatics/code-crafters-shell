@@ -73,27 +73,33 @@ impl<'a> ParserState<'a> {
     }
 }
 
-/// Parses a given command text.
-pub fn parse(command_text: &str) -> anyhow::Result<Option<Pipeline>> {
+/// Parses a given command text. Returns an array of commands which represents
+/// a pipeline.
+pub fn parse(command_text: &str) -> anyhow::Result<Vec<Command>> {
     let mut state = ParserState::new(command_text)?;
     match state.current.tag {
         TokenTag::Word => {
             let pipeline = pipeline(&mut state)?;
-            Ok(Some(pipeline))
+            Ok(pipeline)
         }
-        TokenTag::EndOfCommand => Ok(None),
+        TokenTag::EndOfCommand => Ok(Vec::new()),
         tag => Err(anyhow!("unexpected token `{:?}`", tag)),
     }
 }
 
-fn pipeline(state: &mut ParserState) -> anyhow::Result<Pipeline> {
-    let left_command = command(state)?;
-    if state.matches(TokenTag::Pipe)? {
-        let right_command = command(state)?;
-        Ok(Pipeline::Double(left_command, right_command))
-    } else {
-        Ok(Pipeline::Single(left_command))
+/// Parses a pipeline of commands. Returns a vector of all commands in the
+/// pipeline in order.
+fn pipeline(state: &mut ParserState) -> anyhow::Result<Vec<Command>> {
+    let mut commands = Vec::new();
+
+    let mut parse_another_command = true;
+    while parse_another_command {
+        let command = command(state)?;
+        commands.push(command);
+        parse_another_command = state.matches(TokenTag::Pipe)?;
     }
+
+    Ok(commands)
 }
 
 fn command(state: &mut ParserState) -> anyhow::Result<Command> {

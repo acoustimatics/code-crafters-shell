@@ -1,21 +1,18 @@
 //! Abstract syntax tree types for a command.
 
-pub enum Pipeline {
-    Single(Command),
-    Double(Command, Command),
-}
-
 /// A shell command.
 pub enum Command {
     BuiltIn(BuiltInCommand),
     External(ExternalCommand),
 }
 
+/// Contents of a built-in command.
 pub struct BuiltInCommand {
     pub built_in: BuiltIn,
     pub redirection: Redirection,
 }
 
+/// Contents of an external command.
 pub struct ExternalCommand {
     pub args: Vec<String>,
     pub redirection: Redirection,
