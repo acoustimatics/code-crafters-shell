@@ -47,6 +47,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytes",
+ "parser-state",
  "rustyline",
  "thiserror",
  "trie-rs",
@@ -186,6 +187,15 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+]
+
+[[package]]
+name = "parser-state"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83957e262a56a3208e64adad5ce5b6a48d798e0cf7404a99a1d9355372de92cc"
+dependencies = [
+ "anyhow",
 ]
 
 [[package]]

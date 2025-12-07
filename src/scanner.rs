@@ -1,5 +1,6 @@
 //! Scanner for the command line parser.
 
+use std::fmt;
 use std::str::Chars;
 
 use anyhow::anyhow;
@@ -33,6 +34,21 @@ pub enum TokenTag {
     Word,
 }
 
+impl fmt::Display for TokenTag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EndOfCommand => write!(f, "End of Command"),
+            Self::Integer(i) => write!(f, "{}", i),
+            Self::Pipe => write!(f, "|"),
+            Self::RedirectOut => write!(f, ">"),
+            Self::RedirectOutAppend => write!(f, ">>"),
+            Self::RedirectOutWithFileDescriptor(i) => write!(f, "{}>", i),
+            Self::RedirectOutAppendWithFileDescriptor(i) => write!(f, "{}>>", i),
+            Self::Word => write!(f, "Word"),
+        }
+    }
+}
+
 /// A token in a command text.
 #[derive(Debug)]
 pub struct Token {
@@ -46,6 +62,18 @@ pub struct Token {
 impl Token {
     fn new(tag: TokenTag, lexeme: String) -> Token {
         Token { tag, lexeme }
+    }
+}
+
+impl parser_state::Token for Token {
+    type Tag = TokenTag;
+
+    fn tag(&self) -> Self::Tag {
+        self.tag
+    }
+
+    fn lexeme(&self) -> &str {
+        &self.lexeme
     }
 }
 
@@ -80,21 +108,11 @@ pub struct Scanner<'a> {
     next: Option<char>,
 }
 
-impl<'a> Scanner<'a> {
-    /// Creates a scanner for a give command text.
-    pub fn new<'b>(command_text: &'b str) -> Scanner<'b> {
-        let mut scanner = Scanner {
-            chars: command_text.chars(),
-            current: None,
-            next: None,
-        };
-        scanner.advance();
-        scanner.advance();
-        scanner
-    }
+impl<'a> parser_state::Lexer for Scanner<'a> {
+    type Token = Token;
 
     /// Returns the next token in the command text.
-    pub fn next_token(&mut self) -> anyhow::Result<Token> {
+    fn next_token(&mut self) -> anyhow::Result<Self::Token> {
         self.skip_whitespace();
 
         let token = match self.current {
@@ -123,6 +141,20 @@ impl<'a> Scanner<'a> {
         };
 
         Ok(token)
+    }
+}
+
+impl<'a> Scanner<'a> {
+    /// Creates a scanner for a give command text.
+    pub fn new<'b>(command_text: &'b str) -> Scanner<'b> {
+        let mut scanner = Scanner {
+            chars: command_text.chars(),
+            current: None,
+            next: None,
+        };
+        scanner.advance();
+        scanner.advance();
+        scanner
     }
 
     /// Scans a quoted word.

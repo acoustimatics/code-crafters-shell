@@ -2,81 +2,17 @@
 
 use anyhow::anyhow;
 
-use crate::{ast::*, scanner::*};
+use crate::ast::*;
+use crate::scanner::{Scanner, TokenTag};
+use parser_state::ParserState;
 
-/// Tracks and changes the state of the parser.
-struct ParserState<'a> {
-    /// A scanner to tokenize a command.
-    scanner: Scanner<'a>,
-
-    /// The current token in the command.
-    current: Token,
-}
-
-impl<'a> ParserState<'a> {
-    /// Creates and initialize a parser for a given command.
-    fn new(command: &'a str) -> anyhow::Result<ParserState<'a>> {
-        let mut scanner = Scanner::new(command);
-        let current = scanner.next_token()?;
-        Ok(ParserState { scanner, current })
-    }
-
-    /// Advances to the next token.
-    fn advance(&mut self) -> anyhow::Result<()> {
-        self.current = self.scanner.next_token()?;
-        Ok(())
-    }
-
-    /// Advances to the next token, returning the current token before the
-    /// advance.
-    fn advance_keep_current(&mut self) -> anyhow::Result<Token> {
-        let kept = std::mem::replace(&mut self.current, self.scanner.next_token()?);
-        Ok(kept)
-    }
-
-    fn matches(&mut self, expected_tag: TokenTag) -> anyhow::Result<bool> {
-        let is_match = self.current.tag == expected_tag;
-        if is_match {
-            self.advance()?;
-        }
-        Ok(is_match)
-    }
-
-    /// Advances to the next token if the given tag matches the current token's
-    /// tag. Otherwise, an error is returned.
-    fn _expect(&mut self, expected_tag: TokenTag) -> anyhow::Result<()> {
-        if self.current.tag == expected_tag {
-            self.advance()?;
-            Ok(())
-        } else {
-            Err(anyhow!(
-                "expected `{:?}` but got `{}`",
-                expected_tag,
-                self.current.lexeme
-            ))
-        }
-    }
-
-    /// If the current token matches the given tag, advances to the next token
-    /// and returns the matched lexeme. Otherwise, an error is returned.
-    fn expect_lexeme(&mut self, tag: TokenTag) -> anyhow::Result<String> {
-        if self.current.tag == tag {
-            let token = self.advance_keep_current()?;
-            Ok(token.lexeme)
-        } else {
-            Err(anyhow!(
-                "expected `{:?}` but found `{}`",
-                tag,
-                self.current.lexeme
-            ))
-        }
-    }
-}
+type PS<'a> = ParserState<Scanner<'a>>;
 
 /// Parses a given command text. Returns an array of commands which represents
 /// a pipeline.
 pub fn parse(command_text: &str) -> anyhow::Result<Vec<Command>> {
-    let mut state = ParserState::new(command_text)?;
+    let scanner = Scanner::new(command_text);
+    let mut state = ParserState::new(scanner)?;
     match state.current.tag {
         TokenTag::Word => {
             let pipeline = pipeline(&mut state)?;
@@ -89,7 +25,7 @@ pub fn parse(command_text: &str) -> anyhow::Result<Vec<Command>> {
 
 /// Parses a pipeline of commands. Returns a vector of all commands in the
 /// pipeline in order.
-fn pipeline(state: &mut ParserState) -> anyhow::Result<Vec<Command>> {
+fn pipeline(state: &mut PS) -> anyhow::Result<Vec<Command>> {
     let mut commands = Vec::new();
 
     let mut parse_another_command = true;
@@ -102,7 +38,7 @@ fn pipeline(state: &mut ParserState) -> anyhow::Result<Vec<Command>> {
     Ok(commands)
 }
 
-fn command(state: &mut ParserState) -> anyhow::Result<Command> {
+fn command(state: &mut PS) -> anyhow::Result<Command> {
     assert!(state.current.tag == TokenTag::Word);
 
     let command = if let Some(built_in) = built_in(state)? {
@@ -122,7 +58,7 @@ fn command(state: &mut ParserState) -> anyhow::Result<Command> {
     Ok(command)
 }
 
-fn redirection(state: &mut ParserState) -> anyhow::Result<Redirection> {
+fn redirection(state: &mut PS) -> anyhow::Result<Redirection> {
     use Redirection::*;
     use TokenTag::*;
 
@@ -155,7 +91,7 @@ fn redirection(state: &mut ParserState) -> anyhow::Result<Redirection> {
     Ok(redirection)
 }
 
-fn redirection_filename(state: &mut ParserState) -> anyhow::Result<String> {
+fn redirection_filename(state: &mut PS) -> anyhow::Result<String> {
     // Advance past the redirection operator.
     state.advance()?;
 
@@ -163,7 +99,7 @@ fn redirection_filename(state: &mut ParserState) -> anyhow::Result<String> {
     Ok(filename)
 }
 
-fn built_in(state: &mut ParserState) -> anyhow::Result<Option<BuiltIn>> {
+fn built_in(state: &mut PS) -> anyhow::Result<Option<BuiltIn>> {
     assert!(state.current.tag == TokenTag::Word);
     let built_in = match state.current.lexeme.as_ref() {
         "cd" => cd(state)?,
@@ -177,7 +113,7 @@ fn built_in(state: &mut ParserState) -> anyhow::Result<Option<BuiltIn>> {
 }
 
 /// Parses a cd command.
-fn cd(state: &mut ParserState) -> anyhow::Result<BuiltIn> {
+fn cd(state: &mut PS) -> anyhow::Result<BuiltIn> {
     assert!(state.current.tag == TokenTag::Word);
     assert!(state.current.lexeme == "cd");
     state.advance()?;
@@ -186,7 +122,7 @@ fn cd(state: &mut ParserState) -> anyhow::Result<BuiltIn> {
 }
 
 /// Parses an echo commmand.
-fn echo(state: &mut ParserState) -> anyhow::Result<BuiltIn> {
+fn echo(state: &mut PS) -> anyhow::Result<BuiltIn> {
     assert!(state.current.tag == TokenTag::Word);
     assert!(state.current.lexeme == "echo");
     state.advance()?;
@@ -195,7 +131,7 @@ fn echo(state: &mut ParserState) -> anyhow::Result<BuiltIn> {
 }
 
 /// Parses an exit command.
-fn exit(state: &mut ParserState) -> anyhow::Result<BuiltIn> {
+fn exit(state: &mut PS) -> anyhow::Result<BuiltIn> {
     assert!(state.current.tag == TokenTag::Word);
     assert!(state.current.lexeme == "exit");
 
@@ -213,7 +149,7 @@ fn exit(state: &mut ParserState) -> anyhow::Result<BuiltIn> {
 }
 
 /// Parses a pwd command.
-fn pwd(state: &mut ParserState) -> anyhow::Result<BuiltIn> {
+fn pwd(state: &mut PS) -> anyhow::Result<BuiltIn> {
     assert!(state.current.tag == TokenTag::Word);
     assert!(state.current.lexeme == "pwd");
     state.advance()?;
@@ -221,7 +157,7 @@ fn pwd(state: &mut ParserState) -> anyhow::Result<BuiltIn> {
 }
 
 /// Parses the `type` builtin.
-fn type_builtin(state: &mut ParserState) -> anyhow::Result<BuiltIn> {
+fn type_builtin(state: &mut PS) -> anyhow::Result<BuiltIn> {
     assert!(state.current.tag == TokenTag::Word);
     assert!(state.current.lexeme == "type");
     state.advance()?;
@@ -230,7 +166,7 @@ fn type_builtin(state: &mut ParserState) -> anyhow::Result<BuiltIn> {
 }
 
 /// Collects tokens into a vector as long as they are Word or Integer.
-fn collect_integer_word(state: &mut ParserState) -> anyhow::Result<Vec<String>> {
+fn collect_integer_word(state: &mut PS) -> anyhow::Result<Vec<String>> {
     let mut items = Vec::new();
     while let TokenTag::Word | TokenTag::Integer(_) = state.current.tag {
         items.push(state.current.lexeme.clone());
