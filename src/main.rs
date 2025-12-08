@@ -5,9 +5,8 @@ mod scanner;
 mod system;
 
 use rustyline::completion::Candidate;
-use rustyline::Helper;
 use rustyline::{
-    Completer, CompletionType, Config, Context, Editor, Highlighter, Hinter, Validator,
+    Completer, CompletionType, Config, Context, Editor, Helper, Highlighter, Hinter, Validator,
 };
 
 use crate::ast::*;
@@ -189,7 +188,7 @@ fn eval_built_in<TOut: Write, TErr: Write>(
             }
         },
         BuiltIn::Type(command) => match command.as_ref() {
-            "cd" | "echo" | "exit" | "pwd" | "type" => {
+            "cd" | "echo" | "exit" | "history" | "pwd" | "type" => {
                 writeln!(stdout, "{} is a shell builtin", command)?;
             }
             _ => match search_for_executable_file(paths, command) {
@@ -201,6 +200,7 @@ fn eval_built_in<TOut: Write, TErr: Write>(
                 }
             },
         },
+        BuiltIn::History => unimplemented!(),
     }
     Ok(())
 }

@@ -105,6 +105,7 @@ fn built_in(state: &mut PS) -> anyhow::Result<Option<BuiltIn>> {
         "cd" => cd(state)?,
         "echo" => echo(state)?,
         "exit" => exit(state)?,
+        "history" => history(state)?,
         "pwd" => pwd(state)?,
         "type" => type_builtin(state)?,
         _ => return Ok(None),
@@ -146,6 +147,12 @@ fn exit(state: &mut PS) -> anyhow::Result<BuiltIn> {
     };
 
     Ok(BuiltIn::Exit(status))
+}
+
+fn history(state: &mut PS) -> anyhow::Result<BuiltIn> {
+    state.advance()?;
+
+    Ok(BuiltIn::History)
 }
 
 /// Parses a pwd command.
