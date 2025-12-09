@@ -30,7 +30,8 @@ pub enum BuiltIn {
     /// Exits the shell with a return code.
     Exit(i32),
 
-    History,
+    /// Shows history with an optional limit.
+    History(Option<usize>),
 
     /// Prints the working directory.
     Pwd,

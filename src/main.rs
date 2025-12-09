@@ -45,10 +45,10 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn eval(paths: &[PathBuf], history: &[String]) -> anyhow::Result<()> {
-    assert!(history.len() > 0);
+    assert!(!history.is_empty());
 
     let command_text = &history[history.len() - 1];
-    let pipeline = parse(&command_text)?;
+    let pipeline = parse(command_text)?;
     let n = pipeline.len();
 
     // This has the child process for each item command in the pipeline. If the
@@ -133,7 +133,13 @@ fn eval_built_in_command(
         } => {
             let mut stdout = open_file(filename, *is_append)?;
             let mut stderr = io::stderr();
-            eval_built_in(paths, history, &mut stdout, &mut stderr, &built_in_command.built_in)?;
+            eval_built_in(
+                paths,
+                history,
+                &mut stdout,
+                &mut stderr,
+                &built_in_command.built_in,
+            )?;
             Ok(Vec::new())
         }
 
@@ -143,14 +149,26 @@ fn eval_built_in_command(
         } => {
             let mut stdout = Cursor::new(Vec::new());
             let mut stderr = open_file(filename, *is_append)?;
-            eval_built_in(paths, history, &mut stdout, &mut stderr, &built_in_command.built_in)?;
+            eval_built_in(
+                paths,
+                history,
+                &mut stdout,
+                &mut stderr,
+                &built_in_command.built_in,
+            )?;
             Ok(stdout.into_inner())
         }
 
         Redirection::None => {
             let mut stdout = Cursor::new(Vec::new());
             let mut stderr = io::stderr();
-            eval_built_in(paths, history, &mut stdout, &mut stderr, &built_in_command.built_in)?;
+            eval_built_in(
+                paths,
+                history,
+                &mut stdout,
+                &mut stderr,
+                &built_in_command.built_in,
+            )?;
             Ok(stdout.into_inner())
         }
     }
@@ -207,9 +225,14 @@ fn eval_built_in<TOut: Write, TErr: Write>(
                 }
             },
         },
-        BuiltIn::History => {
-            for (i, command_text) in history.iter().enumerate() {
-                writeln!(stdout, "\t{}\t{}", i, command_text)?;
+        BuiltIn::History(limit) => {
+            let skip = match limit {
+                Some(limit) if *limit >= history.len() => 0,
+                Some(limit) => history.len() - limit,
+                None => 0,
+            };
+            for (i, command_text) in history.iter().enumerate().skip(skip) {
+                writeln!(stdout, "\t{}\t{}", i + 1, command_text)?;
             }
         }
     }

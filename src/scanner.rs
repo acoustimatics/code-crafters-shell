@@ -12,7 +12,7 @@ pub enum TokenTag {
     EndOfCommand,
 
     /// An integer literal.
-    Integer(i32),
+    Integer(u32),
 
     /// A pipe operator `|`.
     Pipe,
@@ -24,10 +24,10 @@ pub enum TokenTag {
     RedirectOutAppend,
 
     /// Output redirection opterator with a file descriptor, e.g. `1>`.
-    RedirectOutWithFileDescriptor(i32),
+    RedirectOutWithFileDescriptor(u32),
 
     /// Output redirection append opterator with a file descriptor, e.g. `1>>`.
-    RedirectOutAppendWithFileDescriptor(i32),
+    RedirectOutAppendWithFileDescriptor(u32),
 
     /// A word which is a string of non-whitespace characters that doesn't
     /// start with a digit.
@@ -264,7 +264,7 @@ impl<'a> Scanner<'a> {
             }
         }
 
-        let i = parse_i32(&lexeme)?;
+        let i = parse_u32(&lexeme)?;
 
         let tag = match self.current {
             Some('>') if matches!(self.next, Some('>')) => {
@@ -301,11 +301,13 @@ impl<'a> Scanner<'a> {
     }
 }
 
-/// Parse string as an `i32` with a custom error result.
-fn parse_i32(s: &str) -> anyhow::Result<i32> {
+/// Parse string as an `u32` with a custom error result.
+fn parse_u32(s: &str) -> anyhow::Result<u32> {
     match s.parse() {
         Ok(i) => Ok(i),
-        Err(_) => Err(anyhow!("couldn't parse `{s}` as a signed 32 bit integer")),
+        Err(_) => Err(anyhow!(
+            "couldn't parse `{s}` as an unsigned 32 bit integer"
+        )),
     }
 }
 

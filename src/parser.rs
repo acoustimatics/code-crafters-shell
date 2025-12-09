@@ -146,13 +146,24 @@ fn exit(state: &mut PS) -> anyhow::Result<BuiltIn> {
         _ => 0,
     };
 
-    Ok(BuiltIn::Exit(status))
+    Ok(BuiltIn::Exit(status as i32))
 }
 
+/// Parses a history command.
 fn history(state: &mut PS) -> anyhow::Result<BuiltIn> {
+    assert!(state.current.tag == TokenTag::Word);
+    assert!(state.current.lexeme == "history");
     state.advance()?;
 
-    Ok(BuiltIn::History)
+    let limit = match state.current.tag {
+        TokenTag::Integer(limit) => {
+            state.advance()?;
+            Some(limit as usize)
+        }
+        _ => None,
+    };
+
+    Ok(BuiltIn::History(limit))
 }
 
 /// Parses a pwd command.
