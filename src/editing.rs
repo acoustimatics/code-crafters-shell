@@ -1,17 +1,18 @@
 //! Module used to handle rustyline library.
 
+use crate::system::*;
 use rustyline::completion::Candidate;
+use rustyline::history::FileHistory;
 use rustyline::{
     Completer, CompletionType, Config, Context, Editor, Helper, Highlighter, Hinter, Validator,
 };
-use rustyline::history::FileHistory;
 use std::path::PathBuf;
-use crate::system::*;
 
 pub fn create_editor(paths: &[PathBuf]) -> anyhow::Result<Editor<ShellHelper<'_>, FileHistory>> {
-    let completer = ShellCompleter::new(&paths);
+    let completer = ShellCompleter::new(paths);
     let helper = ShellHelper::new(completer);
     let config = Config::builder()
+        .auto_add_history(true)
         .completion_type(CompletionType::List)
         .build();
     let mut editor = Editor::with_config(config)?;

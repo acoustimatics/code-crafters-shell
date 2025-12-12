@@ -9,6 +9,7 @@ use crate::ast::*;
 use crate::editing::*;
 use crate::parser::*;
 use crate::system::*;
+use rustyline::history::{History, SearchDirection};
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::{self, Cursor, Write};
@@ -17,21 +18,19 @@ use std::process::{Child, Stdio};
 
 fn main() -> anyhow::Result<()> {
     let paths = get_path();
-    let mut history = Vec::new();
     let mut editor = create_editor(&paths)?;
     loop {
         let command_text = editor.readline("$ ")?;
-        history.push(command_text);
-        if let Err(e) = eval(&paths, &history) {
+        if let Err(e) = eval(&paths, editor.history(), &command_text) {
             eprintln!("{}", e);
         }
     }
 }
 
-fn eval(paths: &[PathBuf], history: &[String]) -> anyhow::Result<()> {
-    assert!(!history.is_empty());
-
-    let command_text = &history[history.len() - 1];
+fn eval<H>(paths: &[PathBuf], history: &H, command_text: &str) -> anyhow::Result<()>
+where
+    H: History,
+{
     let pipeline = parse(command_text)?;
     let n = pipeline.len();
 
@@ -105,11 +104,14 @@ fn eval(paths: &[PathBuf], history: &[String]) -> anyhow::Result<()> {
 }
 
 /// Evaluates a built in command. Returns stdout contents, if any.
-fn eval_built_in_command(
+fn eval_built_in_command<H>(
     paths: &[PathBuf],
-    history: &[String],
+    history: &H,
     built_in_command: &BuiltInCommand,
-) -> anyhow::Result<Vec<u8>> {
+) -> anyhow::Result<Vec<u8>>
+where
+    H: History,
+{
     match &built_in_command.redirection {
         Redirection::StdOut {
             filename,
@@ -159,13 +161,16 @@ fn eval_built_in_command(
 }
 
 /// Evaluates a built in command.
-fn eval_built_in<TOut: Write, TErr: Write>(
+fn eval_built_in<H, TOut: Write, TErr: Write>(
     paths: &[PathBuf],
-    history: &[String],
+    history: &H,
     stdout: &mut TOut,
     stderr: &mut TErr,
     built_in: &BuiltIn,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    H: History,
+{
     match built_in {
         BuiltIn::Echo(args) => {
             if !args.is_empty() {
@@ -210,14 +215,26 @@ fn eval_built_in<TOut: Write, TErr: Write>(
             },
         },
         BuiltIn::History(limit) => {
-            let skip = match limit {
-                Some(limit) if *limit >= history.len() => 0,
-                Some(limit) => history.len() - limit,
-                None => 0,
-            };
-            for (i, command_text) in history.iter().enumerate().skip(skip) {
-                writeln!(stdout, "\t{}\t{}", i + 1, command_text)?;
-            }
+            print_history(history, stdout, limit)?;
+        }
+    }
+    Ok(())
+}
+
+fn print_history<H: History, TOut: Write>(
+    history: &H,
+    stdout: &mut TOut,
+    limit: &Option<usize>,
+) -> anyhow::Result<()> {
+    let len = history.len();
+    let start = match limit {
+        Some(limit) if *limit >= len => 0,
+        Some(limit) => len - limit,
+        None => 0,
+    };
+    for i in start..len {
+        if let Some(result) = history.get(i, SearchDirection::Forward)? {
+            writeln!(stdout, "\t{}\t{}", i + 1, result.entry)?;
         }
     }
     Ok(())
